@@ -1,5 +1,7 @@
 ## 建置與執行
 ```
+git clone git@github.com:bugarma/FreezeCasting_GPU.git
+cd FreezeCasting_GPU
 make
 make run
 ```
