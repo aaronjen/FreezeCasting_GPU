@@ -1,6 +1,6 @@
 CXX = g++
 
-CXXFLAGS  = -Wall -O2 -std=c++11 -Ieigen/
+CXXFLAGS  = -O2 -std=c++11 -I ./eigen
 CSRCS     = $(wildcard *.cpp)
 CHDRS     = $(wildcard *.h)
 COBJS     = $(addsuffix .o, $(basename $(CSRCS)))
