@@ -108,7 +108,37 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
 		M11e = M12e = M21e = M22e = K11e = K12e = K21e = K22e = MatrixXd::Zero(numNodePerElement, numNodePerElement);
 		F1e = VectorXd::Zero(numNodePerElement);
 
+
+		// TODO: opitmize gaussian
 		// cycle for Gauss point
+		const double xi_tab[9] = {-0.7745966692,
+								  -0.7745966692,
+								  -0.7745966692,
+								   0.0000000000,
+								   0.0000000000,
+								   0.0000000000,
+								   0.7745966692,
+								   0.7745966692,
+								   0.7745966692}
+		const double eta_tab[9] = {-0.7745966692,
+							 	    0.0000000000,
+							 	    0.7745966692,
+							 	   -0.7745966692,
+							 	    0.0000000000,
+							 	    0.7745966692,
+							 	   -0.7745966692,
+							 	    0.0000000000,
+							 	    0.7745966692}
+		const double W_tab[9] = {0.308641975,
+						   		 0.493827161,
+						   		 0.308641975,
+						   		 0.493827161,
+						   		 0.790123457,
+						   		 0.493827161,
+						   		 0.308641975,
+						   		 0.493827161,
+						   		 0.308641975}
+		// nGp = 9
         for (int gp=0; gp<nGp; gp++) {
             xi = LocationsAndWeights(gp,0);
             eta = LocationsAndWeights(gp,1);
