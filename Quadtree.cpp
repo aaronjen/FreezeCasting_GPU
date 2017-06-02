@@ -1,5 +1,4 @@
 #include "Quadtree.h"
-
 #include "FEM.h"
 #include "ShapeFunctions.h"
 #include <iostream>
@@ -11,7 +10,6 @@
 #include <Eigen/Dense>
 using namespace std;
 using namespace Eigen;
-using namespace AMR;
 
 	///////////////////
 	// (3)--(6)--(2) //
@@ -20,6 +18,95 @@ using namespace AMR;
 	//  |         |  //
 	// (0)--(4)--(1) //
 	///////////////////
+
+void Quadtree_Initialization(double Nx, double Ny, unsigned maxLv, double gamma,
+							vector<vector<shared_ptr<Element>>>& vvpLevelElementList, 
+							map<Coord, unsigned>& mNodeCoordinateList,
+							vector<vector<int>>& vvEFT,
+							int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
+							map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
+
+	// Offer containers for elements from level 0 to maxLv
+	vvpLevelElementList.resize(maxLv + 1);
+	// Level 0
+	//cout << "Construct Root:" << endl;
+	Quadtree_ConstructRoot(Nx, Ny, maxLv, vvpLevelElementList);
+
+	// Subdivide Level 1 to maxLv
+	//cout << endl << "Subdivide:" << endl;
+	Quadtree_Subdivide(maxLv, gamma, vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
+}
+
+
+void Quadtree_MeshGenerate(unsigned maxLv, double gamma, vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
+						  map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
+
+	// Fuse Level maxLv-1 to 0
+	//cout << endl << "Fuse:" << endl;
+	Quadtree_Fuse(maxLv, gamma, vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
+
+	// Subdivide Level 1 to maxLv
+	//cout << endl << "Subdivide:" << endl;
+	Quadtree_Subdivide(maxLv, gamma, vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
+}
+
+
+void Quadtree_ConstructRoot(double Nx, double Ny, unsigned maxLv,
+						   vector<vector<shared_ptr<Element>>>& vvpLevelElementList) {
+
+	Coord SW(0, 0);
+	Coord SE(Nx, 0);
+	Coord NE(Nx, Ny);
+	Coord NW(0, Nx);
+	array<Coord, 4> RootCoordinates = { SW, SE, NE, NW };
+
+	shared_ptr<Element> Root = CreateElement(RootCoordinates, 0, 0, maxLv, vvpLevelElementList);
+	//cout << "\tLevel 0 \tDone!" << endl;
+}
+
+
+void Quadtree_Subdivide(unsigned maxLv, double gamma, vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList, 
+					   map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
+
+	for (unsigned lv = 0; lv < maxLv; lv++) {
+		for (unsigned i = 0; i < vvpLevelElementList[lv].size(); i++) {
+			if (vvpLevelElementList[lv][i]->CheckError(option, mPhiCoordinateList, mUCoordinateList, gamma)) {
+				vvpLevelElementList[lv][i]->Subdivide(maxLv, vvpLevelElementList, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
+			}
+		}
+		//cout << "\tLevel " << lv + 1 << " \tDone!" << endl;
+	}
+}
+
+
+void Quadtree_Fuse(unsigned maxLv, double gamma, vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
+				  map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
+
+	for (unsigned lv = 0; lv < maxLv; lv++) {
+		unsigned reverseLv = maxLv - 1 - lv;
+		if (vvpLevelElementList[reverseLv].size() > 0) {
+			for (unsigned i = 0; i < vvpLevelElementList[reverseLv].size(); i++) {
+				vvpLevelElementList[reverseLv][i]->Fuse(vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList, gamma);
+			}
+		}
+		//cout << "\tLevel " << reverseLv << " \tDone!" << endl;
+	}
+
+	//cout << endl << "Deleting unused elements..." << endl;
+	DeleteElement(vvpLevelElementList);
+}
+
+void Quadtree_AddNodes(vector<vector<shared_ptr<Element>>>& vvpLevelElementList, map<Coord, unsigned>& mNodeCoordinateList) {
+
+	// Initialization
+	mNodeCoordinateList.clear();
+	
+	// Add nodes for leaf elements
+	for (unsigned lv = 0; lv < vvpLevelElementList.size(); lv++)
+		for (unsigned e = 0; e < vvpLevelElementList[lv].size(); e++)
+			if (!vvpLevelElementList[lv][e]->apChildren[0])
+				vvpLevelElementList[lv][e]->AddNodes(mNodeCoordinateList);
+}
 
 void Element::Subdivide(unsigned maxLv, vector<vector<shared_ptr<Element>>>& vvpLevelElementList,
 					   map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
@@ -203,7 +290,7 @@ void Element::Subdivide(unsigned maxLv, vector<vector<shared_ptr<Element>>>& vvp
 }
 
 
-void Element::Fuse(vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
+void Element::Fuse(vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList, 
 				  map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList, double gamma) {
 	if (apChildren[0] && // If the element has children
 		apChildren[0]->apChildren[0] == 0 &&
@@ -369,22 +456,27 @@ bool Element::CheckError(int option, map<Coord, double>& mPhiCoordinateList, map
 		cotangent = get_cotangent(psi, B); // 2x1
 		DERX = cotangent(0);
 		DERY = cotangent(1);
-		return (sqrt(DERX*DERX + DERY*DERY) > 0.3 && acNodalCoordinates[0].x >= 0 && acNodalCoordinates[1].x <= 204.8 || uLevel <= 3);
+		return (sqrt(DERX*DERX + DERY*DERY) > 0.3 && acNodalCoordinates[0].x >= 0 && acNodalCoordinates[1].x <= 1638.4 || uLevel <= 1);
 		break;
 	case 11: // Initialization
 		for (unsigned i = 0; i < 4; i++) {
 			elementNodesCoord(i, 0) = acNodalCoordinates[i].x;
 			elementNodesCoord(i, 1) = acNodalCoordinates[i].y;
-			double rad = x_mid / 164;
-			double seeds = 32;
-			//double dist = sqrt(pow(elementNodesCoord(i,0)-x_mid,2.0) + pow(elementNodesCoord(i,1)-y_mid,2.0)) - rad;
+			double rad = x_mid / 256;
+			double seeds = 4;
+			double dist = sqrt(pow(elementNodesCoord(i,0)-x_mid,2.0) + pow(elementNodesCoord(i,1)-y_mid,2.0)) - rad;
 			//double dist = sqrt(pow(elementNodesCoord(i,0),2.0) + pow(elementNodesCoord(i,1),2.0)) - rad;
-			/*double dist = sqrt(pow(elementNodesCoord(i, 0) - 1 * x_mid * 2.0 / seeds, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad;
-			for (int s = 1; s < 4; s+=2)
+			/*double dist = sqrt(pow(elementNodesCoord(i, 0) - x_mid * 2, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad;
+			for (int s = 0; s < seeds; s++)
 				if (sqrt(pow(elementNodesCoord(i, 0) - s * x_mid * 2.0 / seeds, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad < dist)
 					dist = sqrt(pow(elementNodesCoord(i, 0) - s * x_mid * 2.0 / seeds, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad;*/
-			
-			double dist = elementNodesCoord(i, 1) - rad;
+			//psi[i] = -tanh(dist/sqrt(2));
+			//if (elementNodesCoord(i, 0) < 0 || elementNodesCoord(i, 0) > 1638.4 || elementNodesCoord(i, 1) > rad)
+			//	psi[i] = -1;
+			//else
+			//	psi[i] = 1;
+			//double dist = elementNodesCoord(i, 1) - rad;
+			//double dist = sqrt(pow(elementNodesCoord(i, 0) - 819.2, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad;
 			psi[i] = -tanh(dist / sqrt(2));
 		}
 		dN = NaturalDerivatives(0, 0, bitset<8>("00001111")); // at mass center
@@ -442,7 +534,7 @@ void Element::Clean() {
 }
 
 
-shared_ptr<Element> AMR::CreateElement(array<Coord, 4> Bounding, shared_ptr<Element> Parent, unsigned uLevel, unsigned maxLv,
+shared_ptr<Element> CreateElement(array<Coord, 4> Bounding, shared_ptr<Element> Parent, unsigned uLevel, unsigned maxLv,
 								  vector<vector<shared_ptr<Element>>>& vvpLevelElementList) {
 
 	shared_ptr<Element>  pElement(new Element(Parent, uLevel, Bounding)); // create new element
@@ -453,97 +545,7 @@ shared_ptr<Element> AMR::CreateElement(array<Coord, 4> Bounding, shared_ptr<Elem
 }
 
 
-void AMR::Quadtree_Initialization(double Nx, double Ny, unsigned maxLv, double gamma,
-	vector<vector<shared_ptr<Element>>>& vvpLevelElementList,
-	map<Coord, unsigned>& mNodeCoordinateList,
-	vector<vector<int>>& vvEFT,
-	int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
-	map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
-
-	// Offer containers for elements from level 0 to maxLv
-	vvpLevelElementList.resize(maxLv + 1);
-	// Level 0
-	//cout << "Construct Root:" << endl;
-	Quadtree_ConstructRoot(Nx, Ny, maxLv, vvpLevelElementList);
-
-	// Subdivide Level 1 to maxLv
-	//cout << endl << "Subdivide:" << endl;
-	Quadtree_Subdivide(maxLv, gamma, vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
-}
-
-
-void AMR::Quadtree_MeshGenerate(unsigned maxLv, double gamma, vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
-	map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
-
-	// Fuse Level maxLv-1 to 0
-	//cout << endl << "Fuse:" << endl;
-	Quadtree_Fuse(maxLv, gamma, vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
-
-	// Subdivide Level 1 to maxLv
-	//cout << endl << "Subdivide:" << endl;
-	Quadtree_Subdivide(maxLv, gamma, vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
-}
-
-
-void AMR::Quadtree_ConstructRoot(double Nx, double Ny, unsigned maxLv,
-	vector<vector<shared_ptr<Element>>>& vvpLevelElementList) {
-
-	Coord SW(0, 0);
-	Coord SE(Nx, 0);
-	Coord NE(Nx, Ny);
-	Coord NW(0, Nx);
-	array<Coord, 4> RootCoordinates = { SW, SE, NE, NW };
-
-	shared_ptr<Element> Root = CreateElement(RootCoordinates, 0, 0, maxLv, vvpLevelElementList);
-	//cout << "\tLevel 0 \tDone!" << endl;
-}
-
-
-void AMR::Quadtree_Subdivide(unsigned maxLv, double gamma, vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
-	map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
-
-	for (unsigned lv = 0; lv < maxLv; lv++) {
-		for (unsigned i = 0; i < vvpLevelElementList[lv].size(); i++) {
-			if (vvpLevelElementList[lv][i]->CheckError(option, mPhiCoordinateList, mUCoordinateList, gamma)) {
-				vvpLevelElementList[lv][i]->Subdivide(maxLv, vvpLevelElementList, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
-			}
-		}
-		//cout << "\tLevel " << lv + 1 << " \tDone!" << endl;
-	}
-}
-
-
-void AMR::Quadtree_Fuse(unsigned maxLv, double gamma, vector<vector<shared_ptr<Element>>>& vvpLevelElementList, int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList,
-	map<Coord, double>& mPhiVelocityCoordinateList, map<Coord, double>& mUVelocityCoordinateList) {
-
-	for (unsigned lv = 0; lv < maxLv; lv++) {
-		unsigned reverseLv = maxLv - 1 - lv;
-		if (vvpLevelElementList[reverseLv].size() > 0) {
-			for (unsigned i = 0; i < vvpLevelElementList[reverseLv].size(); i++) {
-				vvpLevelElementList[reverseLv][i]->Fuse(vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList, gamma);
-			}
-		}
-		//cout << "\tLevel " << reverseLv << " \tDone!" << endl;
-	}
-
-	//cout << endl << "Deleting unused elements..." << endl;
-	DeleteElement(vvpLevelElementList);
-}
-
-void AMR::Quadtree_AddNodes(vector<vector<shared_ptr<Element>>>& vvpLevelElementList, map<Coord, unsigned>& mNodeCoordinateList) {
-
-	// Initialization
-	mNodeCoordinateList.clear();
-
-	// Add nodes for leaf elements
-	for (unsigned lv = 0; lv < vvpLevelElementList.size(); lv++)
-		for (unsigned e = 0; e < vvpLevelElementList[lv].size(); e++)
-			if (!vvpLevelElementList[lv][e]->apChildren[0])
-				vvpLevelElementList[lv][e]->AddNodes(mNodeCoordinateList);
-}
-
-
-void AMR::DeleteElement(vector<vector<shared_ptr<Element>>>& vvpLevelElementList) {
+void DeleteElement(vector<vector<shared_ptr<Element>>>& vvpLevelElementList) {
 	
 	vector<vector<shared_ptr<Element>>> NEWvvpLevelElementList(vvpLevelElementList.size());
 
@@ -559,7 +561,7 @@ void AMR::DeleteElement(vector<vector<shared_ptr<Element>>>& vvpLevelElementList
 }
 
 
-void AMR::ReportElement(const vector<vector<shared_ptr<Element>>>& vvpLevelElementList,
+void ReportElement(const vector<vector<shared_ptr<Element>>>& vvpLevelElementList, 
 				   vector<shared_ptr<Element>>& vpFinalElementList,
 				   map<Coord, unsigned>& mNodeCoordinateList,
 				   vector<vector<int>>& vvEFT,
@@ -579,7 +581,7 @@ void AMR::ReportElement(const vector<vector<shared_ptr<Element>>>& vvpLevelEleme
 	// Output element boundary for plotting
 	for (unsigned lv = 0; lv < vvpLevelElementList.size(); lv++) {
 		for (unsigned e = 0; e < vvpLevelElementList[lv].size(); e++) {
-			if (vvpLevelElementList[lv][e]->apChildren[0] == 0 && vvpLevelElementList[lv][e]->acNodalCoordinates[0].x >= 0 && vvpLevelElementList[lv][e]->acNodalCoordinates[1].x <= 204.8) {
+			if (vvpLevelElementList[lv][e]->apChildren[0] == 0 && vvpLevelElementList[lv][e]->acNodalCoordinates[0].x >= 0 && vvpLevelElementList[lv][e]->acNodalCoordinates[1].x <= 1638.4) {
 				vpFinalElementList.push_back(vvpLevelElementList[lv][e]);
 				//for (int i = 0; i < 4; i++) {
 				//	foutX << vvpLevelElementList[lv][e]->acNodalCoordinates[i].x << endl;

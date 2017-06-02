@@ -1,5 +1,4 @@
 #include "FEM.h"
-
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <cmath>
@@ -12,80 +11,46 @@
 #include "Quadtree.h"
 using namespace std;
 using namespace Eigen;
-using namespace AMR;
 
 void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const VectorXd& PHIvelocity, const vector<Coord>& vdNodeCoord, const vector<vector<int>>& vvEFT,
 	const vector<shared_ptr<Element>>& vpFinalElementList,
-    double tloop, double dt,
+    double epsilon, double lambda, double tloop, array<double, 9> model,
     SparseMatrix<double>& mM11, SparseMatrix<double>& mM12, SparseMatrix<double>& mM21, SparseMatrix<double>& mM22, SparseMatrix<double>& mK11, SparseMatrix<double>& mK12,
     SparseMatrix<double>& mK21, SparseMatrix<double>& mK22, VectorXd& vF1) {
     
 	// initialization
-
-	double epsilon_4 = 0.05;
-	double fold = 4;
-	double alpha = 0; // degree
-	double beta = 0; //degree
-
-	double Cinf = 0.25;
-	double k = 0.1;
-	double Cl = 0.74;
-	double a1 = 5.0 * sqrt(2.0) / 8.0;
-	double a2 = 47.0 / 75.0;
-	double epsilon = 100; // W/d0
-	double Vp = 5.0E-6;
-	double d0 = 1.3E-8;
-	double D = 1.0E-9;
-	double mCinf = 2;
-	double m = mCinf / Cinf;
-	double G = 100.0E2;
-	double lT = m*(1 - k)*Cl / G;
-	double theta_inf = 1.0;
-	
-	double Dtelda = a1 * a2 * epsilon;
-	double Vptelda = a1 * a2 * Vp * d0 / D * pow(epsilon, 2.0);
-	double lTtelda = lT / d0 / epsilon;
-	double lambda = a1 * epsilon;
-	double tau = a1 * a2 * pow(epsilon, 3.0) * pow(d0, 2.0);
-	
-	//cout << "Dtelda  = " << Dtelda << endl;
-	//cout << "Vptelda = " << Vptelda << endl;
-	//cout << "lTtelda = " << lTtelda << endl;
-	//cout << "lambda  = " << lambda << endl;
-	//cout << "tau     = " << tau << endl;
-	//cout << endl;
-	
-
-	double T0 = -mCinf / k;
-	double Tinf = T0 + G * Vp * theta_inf * lTtelda / Vptelda;
-	if (int(tloop) % 100 == 0 && tloop >= 100)
-		cout << "\ttemperature: " << Tinf << " --> " << T0 << endl;
+	const double PI = 4 * atan(1.0);
+	double C_inf = model[0];	// (wt%)
+	double k = model[1];		// 
+	double G = model[2];		// (K/cm)
+	double d0 = model[3];		// (1E-6m)
+	double alpha = model[4];	// (1E-6m2/s)
+	double Vp = model[5];		// (1E-6m/s)
+	double T0 = model[6];		// (K)
+	double Ts = model[7];		// (K)
+	double dT0 = model[8];		// (K)
+	double a1 = 0.8839;
+	double a2 = 0.6267;
+	double W0 = d0 * lambda / a1; // (1E-6m)
+	double Tau0 = a2 * lambda * W0 * W0 / alpha; // (s)
+	double D = lambda * a2;
 
 	mM11.setZero(); mM12.setZero(); mM21.setZero(); mM22.setZero(); mK11.setZero(); mK12.setZero(); mK21.setZero(); mK22.setZero(); vF1.setZero();
     typedef Triplet<double> T;
     vector<T> tripletList_M11, tripletList_M12, tripletList_M21, tripletList_M22, tripletList_K11, tripletList_K12, tripletList_K21, tripletList_K22;
-	int nGp = 3 * 3; // 3 x 3 Gauss point
+	int nGp = 2 * 2; // 2 x 2 Gauss point
     MatrixXd LocationsAndWeights = gauss2D(nGp);
-
-	size_t numNodePerElement;
-	bitset<8> bitElementType;
-	MatrixXd elementNodesCoord;
-	VectorXd phi, u, v, Q;
-	MatrixXd M11e, M12e, M21e, M22e, K11e, K12e, K21e, K22e;
-	VectorXd F1e;
-	RowVectorXd N;
-	MatrixXd dN, B, cotangent;
-	double xi, eta, W, J, DERX, DERY, angle, as, asp, PHIe, Ue, Ve, Qe;
+	RowVector2d aniso_parameter;
+	int m = 6;
 
 	for (unsigned e = 0; e < vvEFT.size(); e++) {
-		numNodePerElement = vvEFT[e].size();
-		bitElementType = vpFinalElementList[e]->bitElementType;
+		size_t numNodePerElement = vvEFT[e].size();
+		bitset<8> bitElementType = vpFinalElementList[e]->bitElementType;
         // get the coordinates of the nodes in the element
-        elementNodesCoord.resize(numNodePerElement,2); // n x 2
-        phi.resize(numNodePerElement); // n x 1
-        u.resize(numNodePerElement); // n x 1
-		v.resize(numNodePerElement); // n x 1
-		Q.resize(numNodePerElement); // n x 1
+        MatrixXd elementNodesCoord(numNodePerElement,2); // n x 2
+        VectorXd phi(numNodePerElement); // n x 1
+        VectorXd u(numNodePerElement); // n x 1
+		VectorXd v(numNodePerElement); // n x 1
 
 		for (unsigned i = 0; i < numNodePerElement; i++) {
 			elementNodesCoord(i, 0) = vdNodeCoord[vvEFT[e][i]].x;
@@ -93,90 +58,48 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
 			phi(i) = PHI[vvEFT[e][i]];
 			u(i) = U[vvEFT[e][i]];
 			v(i) = PHIvelocity[vvEFT[e][i]];
-			//if (v(i) != 0)
-			//	cout << v(i) << endl;
-			if ((elementNodesCoord(i, 1)*cos(beta * M_PI / 180) + elementNodesCoord(i, 0)*sin(beta * M_PI / 180) - Vptelda * dt * tloop) / lTtelda /*+ theta_inf*/> theta_inf)
-				Q(i) = theta_inf;
-			else if ((elementNodesCoord(i, 1)*cos(beta * M_PI / 180) + elementNodesCoord(i, 0)*sin(beta * M_PI / 180) - Vptelda * dt * tloop) / lTtelda /*+ theta_inf*/ < 0)
-				Q(i) = 0;
-			else
-				Q(i) = (elementNodesCoord(i, 1)*cos(beta * M_PI / 180) + elementNodesCoord(i, 0)*sin(beta * M_PI / 180) - Vptelda * dt * tloop) / lTtelda /*+ theta_inf*/;
-			//Q(i) = (elementNodesCoord(i, 1)*cos(beta * M_PI / 180) + elementNodesCoord(i, 0)*sin(beta * M_PI / 180) - Vptelda * dt * tloop) / lTtelda;
-			//Q(i) = 0;
         }
-		
-		M11e = M12e = M21e = M22e = K11e = K12e = K21e = K22e = MatrixXd::Zero(numNodePerElement, numNodePerElement);
-		F1e = VectorXd::Zero(numNodePerElement);
+		double RealCoord = W0 * 0.25*(elementNodesCoord(0, 1) + elementNodesCoord(1, 1) + elementNodesCoord(2, 1) + elementNodesCoord(3, 1)) * 1E-6; // n x 2 (m)
+		double RealTime = Tau0 * tloop; // (s)
 
+		MatrixXd Ce = MatrixXd::Zero(numNodePerElement, numNodePerElement);
+		MatrixXd Ae = MatrixXd::Zero(numNodePerElement, numNodePerElement);
+		MatrixXd Ee = MatrixXd::Zero(numNodePerElement, numNodePerElement);
+		VectorXd Fe = VectorXd::Zero(numNodePerElement); // n x 1
 
-		// TODO: opitmize gaussian
+		RowVectorXd N0 = ShapeFunction(0, 0, bitElementType);
+		MatrixXd dN0 = NaturalDerivatives(0, 0, bitElementType); // 2 x n
+		MatrixXd B0 = XYDerivatives(elementNodesCoord, dN0); // 2 x n
+		MatrixXd cotangent = get_cotangent(phi, B0); // 2 x 1
+		double DERX = cotangent(0);
+		double DERY = cotangent(1);
+		double angle = atan2(DERY, DERX);
+		double as = 1 + epsilon * cos(m*(angle - PI / 6)); // A(theta)
+		double asp = -m * epsilon * sin(m*(angle - PI / 6)); // A'(theta)
+		//double as = 1 + epsilon * cos(m*(angle)); // A(theta)
+		//double asp = -m * epsilon * sin(m*(angle)); // A'(theta)
+		double Temperature = T0 + G * 1E2 * (W0 * N0 * elementNodesCoord.col(1) - Vp*RealTime) * 1E-6; // (K)
+		double theta = (Temperature - Ts) / dT0;
+
 		// cycle for Gauss point
-		const double xi_tab[9] = {-0.7745966692,
-								  -0.7745966692,
-								  -0.7745966692,
-								   0.0000000000,
-								   0.0000000000,
-								   0.0000000000,
-								   0.7745966692,
-								   0.7745966692,
-								   0.7745966692}
-		const double eta_tab[9] = {-0.7745966692,
-							 	    0.0000000000,
-							 	    0.7745966692,
-							 	   -0.7745966692,
-							 	    0.0000000000,
-							 	    0.7745966692,
-							 	   -0.7745966692,
-							 	    0.0000000000,
-							 	    0.7745966692}
-		const double W_tab[9] = {0.308641975,
-						   		 0.493827161,
-						   		 0.308641975,
-						   		 0.493827161,
-						   		 0.790123457,
-						   		 0.493827161,
-						   		 0.308641975,
-						   		 0.493827161,
-						   		 0.308641975}
-		// nGp = 9
-        for (int gp=0; gp<nGp; gp++) {
-            xi = LocationsAndWeights(gp,0);
-            eta = LocationsAndWeights(gp,1);
-            W = LocationsAndWeights(gp,2);
-			N = ShapeFunction(xi, eta, bitElementType); // 1 x n
-			dN = NaturalDerivatives(xi, eta, bitElementType); // 2 x n
-			B = XYDerivatives(elementNodesCoord, dN); // 2 x n
-			J = detJacobian(elementNodesCoord, dN); // 1 x 1
-			
-			cotangent = get_cotangent(phi, B); // 2 x 1
-			DERX = cotangent(0);
-			DERY = cotangent(1);
-			angle = atan2(DERY, DERX);
-			//as = 1 + epsilon * cos(fold*(angle - M_PI / 6)); // A(theta)
-			//asp = -fold * epsilon * sin(fold*(angle - M_PI / 6)); // A'(theta)
-			as = 1 + epsilon_4 * cos(fold * (angle - alpha * M_PI / 180)); // A(theta)
-			asp = -fold * epsilon_4 * sin(fold * (angle - alpha * M_PI / 180)); // A'(theta)
-			
-			PHIe = N * phi;
-			Ue = N * u;
-			Ve = N * v;
-			Qe = N * Q;
+        for (int q=0; q<nGp; q++) {
+            double xi = LocationsAndWeights(q,0);
+            double eta = LocationsAndWeights(q,1);
+            double W = LocationsAndWeights(q,2);
+			RowVectorXd N = ShapeFunction(xi, eta, bitElementType); // 1 x n
+			MatrixXd dN = NaturalDerivatives(xi, eta, bitElementType); // 2 x n
+			MatrixXd B = XYDerivatives(elementNodesCoord, dN); // 2 x n
+			double J = detJacobian(elementNodesCoord, dN); // 1 x 1
 
             // matrixs of a element
-			M11e += (1 - (1 - k) * Qe)* as * as * N.transpose() * N * W * J; // n x n
-			M21e += -(1 + (1 - k) * Ue) * 0.5 * N.transpose() * N * W * J; // n x n
-			M22e += ((1 + k) * 0.5 - (1 - k) * 0.5 * PHIe) * N.transpose() * N * W * J; // n x n
-			K11e += as * as * B.transpose() * B * W * J; // n x n
-			K11e += as * asp * (B.row(1).transpose()*B.row(0) - B.row(0).transpose()*B.row(1)) * W * J; // n x n
-			if (DERX*DERX + DERY*DERY > 1.0E-12)
-				K21e += (1 + (1 - k) * Ue) * Ve / sqrt(8.0) / sqrt(DERX*DERX + DERY*DERY) * B.transpose() * B * W * J; // n x n
-			K22e += Dtelda * q(PHIe, k) * B.transpose() * B * W * J; // n x n
-			F1e += N.transpose() * f(PHIe, Ue, Qe, lambda) * W * J;
-			
+            Ce     += N.transpose() * N * W * J; // n x n
+            Ae     -= B.transpose() * B * W * J; // n x n
+			Ee	   -= (B.row(1).transpose()*B.row(0) - B.row(0).transpose()*B.row(1)) * W * J; // n x n
+			Fe	   += N.transpose() * f(N*phi, N*u, theta, lambda) * W * J; // n x 1
         }
         // cycle for element matrixs
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        /*for (unsigned i=0; i<numNodePerElement; i++) {
+        for (unsigned i=0; i<numNodePerElement; i++) {
             for (unsigned j=0; j<numNodePerElement; j++) {
 				if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
 					tripletList_M22.push_back(T(vvEFT[e][i], vvEFT[e][j], Ce(i, j)));
@@ -192,35 +115,31 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
             }
 			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
 				vF1(vvEFT[e][i]) += Fe(i);
-        }*/
+        }
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		
-		for (unsigned i = 0; i<numNodePerElement; i++) {
+		/*for (unsigned i = 0; i<numNodePerElement; i++) {
 			for (unsigned j = 0; j<numNodePerElement; j++) {
-				if (abs(M11e(i, j)) > 1.0E-10)
-					tripletList_M11.push_back(T(vvEFT[e][i], vvEFT[e][j], M11e(i, j)));
-				if (abs(M12e(i, j)) > 1.0E-10)
-					tripletList_M12.push_back(T(vvEFT[e][i], vvEFT[e][j], M12e(i, j)));
-				if (abs(M21e(i, j)) > 1.0E-10)
-					tripletList_M21.push_back(T(vvEFT[e][i], vvEFT[e][j], M21e(i, j)));
-				if (abs(M22e(i, j)) > 1.0E-10)
-					tripletList_M22.push_back(T(vvEFT[e][i], vvEFT[e][j], M22e(i, j)));
-				if (abs(K11e(i, j)) > 1.0E-10)
-					tripletList_K11.push_back(T(vvEFT[e][i], vvEFT[e][j], K11e(i, j)));
-				if (abs(K12e(i, j)) > 1.0E-10)
-					tripletList_K12.push_back(T(vvEFT[e][i], vvEFT[e][j], K12e(i, j)));
-				if (abs(K21e(i, j)) > 1.0E-10)
-					tripletList_K21.push_back(T(vvEFT[e][i], vvEFT[e][j], K21e(i, j)));
-				if (abs(K22e(i, j)) > 1.0E-10)
-					tripletList_K22.push_back(T(vvEFT[e][i], vvEFT[e][j], K22e(i, j)));
+				if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
+					tripletList_C_u1.push_back(T(vvEFT[e][i], vvEFT[e][j], 0.5 * (1 + k) * Ce(i, j)));
+					tripletList_C_u2.push_back(T(vvEFT[e][i], vvEFT[e][j], 0.5 * (1 + (1 - k) * N0 * u) * Ce(i, j)));
+					tripletList_C_u3.push_back(T(vvEFT[e][i], vvEFT[e][j], 0.5 * (0 + (1 - k) * N0 * phi) * Ce(i, j)));
+					tripletList_C_phi.push_back(T(vvEFT[e][i], vvEFT[e][j], (1 - (1 - k) * theta)* as * as * Ce(i, j)));
+
+				}
+				if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
+					tripletList_A_u1.push_back(T(vvEFT[e][i], vvEFT[e][j], D * q(N0 * phi, 0.7) * Ae(i, j)));
+					if (DERX*DERX + DERY*DERY >= 1.0E-12 && N0 * v >= 1.0E-12) tripletList_A_u2.push_back(T(vvEFT[e][i], vvEFT[e][j], (1 + (1 - k) * N0 * u) * (N0 * v + 0) / sqrt(DERX*DERX + DERY*DERY) / 2 / sqrt(2.0) * Ae(i, j)));
+					tripletList_A_phi.push_back(T(vvEFT[e][i], vvEFT[e][j], as * as * Ae(i, j)));
+				}
+				if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
+					tripletList_E_phi.push_back(T(vvEFT[e][i], vvEFT[e][j], as * asp * Ee(i, j)));
 			}
-			if (abs(F1e(i)) > 1.0E-10)
-				vF1(vvEFT[e][i]) += F1e(i);
-			Theta(vvEFT[e][i]) = Q(i);
-		}
-		
-		
-	}
+			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
+				vF_phi(vvEFT[e][i]) += Fe(i);
+			Theta(vvEFT[e][i]) = theta;
+		}*/
+		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    }
 	mM11.setFromTriplets(tripletList_M11.begin(), tripletList_M11.end());
 	mM12.setFromTriplets(tripletList_M12.begin(), tripletList_M12.end());
 	mM21.setFromTriplets(tripletList_M21.begin(), tripletList_M21.end());
@@ -232,11 +151,12 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
 }
 
 void time_discretization(ofstream& fout_time,
-	const unsigned tloop, VectorXd& Theta, VectorXd& PHI, VectorXd& U, VectorXd& PHIvelocity, VectorXd& Uvelocity, double dt,
+	const unsigned tloop, VectorXd& Theta, VectorXd& PHI, VectorXd& U, VectorXd& PHIvelocity, VectorXd& Uvelocity, double dt, double D,
 	SparseMatrix<double>& mM11, SparseMatrix<double>& mM12, SparseMatrix<double>& mM21, SparseMatrix<double>& mM22, SparseMatrix<double>& mK11, SparseMatrix<double>& mK12,
 	SparseMatrix<double>& mK21, SparseMatrix<double>& mK22, VectorXd& vF1,
 	const vector<Coord>& vdNodeCoord, const vector<vector<int>>& vvEFT,
-	const vector<shared_ptr<Element>>& vpFinalElementList) {
+	const vector<shared_ptr<Element>>& vpFinalElementList,
+	double ephilon, double lambda) {
 
 	clock_t t;
 	clock_t solver_time = 0;
@@ -260,6 +180,21 @@ void time_discretization(ofstream& fout_time,
 	double lambda4 = 1;
 	double lambda5 = 1 / (1 + rhos);
 	unsigned nNode = mM11.rows();
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	double m = abs(-2.6);					// liquidus solpe (K/wt%)						//
+	double C_inf = 3;						// alloy composition (wt%)						//
+	double k = 0.14;						// partition coefficient						//
+	double G = 140 * 40;					// thermal gradient (K/cm)						//
+	double Ts = 273;						// solidus temperature (K)						//
+	double dT0 = m * C_inf * (1 - k) / k;	// equilibrium freezing temperature range (K)	//
+	double T0 = Ts - dT0 / 10;				// reference temperature (K)					//
+	double Vp = 3000;						// pulling speed (1E-6m/s)						//
+	double dTn = 8;							// nucleation undercooling (K)					//
+	double d0 = 5E-3;						// chemical capillary length (1E-6m)			//
+	double alpha = 3000;					// liquid diffusion coefficient (1E-6m2/s)		//
+	array<double, 9> model = { C_inf, k, G, d0, alpha, Vp, T0, Ts, dT0 };					//
+	//////////////////////////////////////////////////////////////////////////////////////////
 
 	typedef Triplet<double> T;
 	vector<T> tripletList_q;
@@ -285,7 +220,7 @@ void time_discretization(ofstream& fout_time,
 	VectorXd v1;
 	if (tloop == 0) {
 		PHIvelocity *= 0;
-		find_matrixs(Theta, PHI, U, PHIvelocity, vdNodeCoord, vvEFT, vpFinalElementList, tloop, dt, mM11, mM12, mM21, mM22, mK11, mK12, mK21, mK22, vF1);
+		find_matrixs(Theta, PHI, U, PHIvelocity, vdNodeCoord, vvEFT, vpFinalElementList, ephilon, lambda, tloop, model, mM11, mM12, mM21, mM22, mK11, mK12, mK21, mK22, vF1);
 		SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
 		SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
 		VectorXd F = Up * vF1;
@@ -294,14 +229,13 @@ void time_discretization(ofstream& fout_time,
 		v1 = Up * PHIvelocity + Down * Uvelocity;
 	}
 
-
 	VectorXd d_telda = d1 + W1L4 * v1 * dt;
 	PHI = d_telda.topRows(nNode);
 	U = d_telda.bottomRows(nNode);
 	scheme_time += clock() - t; //<- scheme
 	
 	t = clock(); //-> matrix
-	find_matrixs(Theta, PHI, U, PHIvelocity, vdNodeCoord, vvEFT, vpFinalElementList, tloop, dt, mM11, mM12, mM21, mM22, mK11, mK12, mK21, mK22, vF1);
+	find_matrixs(Theta, PHI, U, PHIvelocity, vdNodeCoord, vvEFT, vpFinalElementList, ephilon, lambda, tloop, model, mM11, mM12, mM21, mM22, mK11, mK12, mK21, mK22, vF1);
 	matrix_time += clock() - t;	 //<- matrix
 
 	t = clock(); //-> scheme
@@ -312,8 +246,6 @@ void time_discretization(ofstream& fout_time,
 
 	t = clock(); //-> solver
 	VectorXd v_telda = solver.compute( M ).solve( F - K*d_telda );
-	//std::cout << "#iterations:     " << solver.iterations() << std::endl;
-	//std::cout << "estimated error: " << solver.error() << std::endl;
 	solver_time += clock() - t; //<- solver
 
 	t = clock(); //-> scheme
@@ -348,20 +280,17 @@ MatrixXd get_cotangent(const VectorXd& phi, const MatrixXd& B) {
 
 // g'(phi) - lambda*U*P'(phi)
 double f(double phi, double u, double theta, double lambda) {
-	//return phi * (1 - phi*phi) - lambda * u * pow(1 - phi*phi, 2.0);
+	return phi * (1 - phi*phi) - lambda * u * pow(1 - phi*phi, 2.0);
 	//return phi * (1 - phi*phi) - lambda * pow(1 - phi*phi, 2.0) * (u + 0.9 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
-	return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta + 0.03 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
 	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta);
 	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta + 0.3 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
-	//return phi * sqrt(2.0) - lambda * (1 - phi*phi) * sqrt(2.0) * (u + theta);
 }
 
 double q(double phi, double k) {
-	return (phi >= 1) ? 0 : (1.0 - phi) / (1.0 + k - (1.0 - k) * phi);
-	//return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi) + (1 + phi) * 0.2 / 2;
+	//return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi);
+	return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi) + (1 + phi) * 0.2 / 2;
 	//return (phi >= 1) ? 0 : (1 - phi) / 2;
 	//return (phi >= 1) ? 0 : (1 - phi) / 2 + (1 + phi) * 0.2 / 2;
-	//return 1;
 }
 
 void MeshRefinement(unsigned maxLv, double gamma, ofstream& fout_time,

@@ -1,5 +1,4 @@
 #include "ShapeFunctions.h"
-
 #include <Eigen/Dense>
 #include <bitset>
 #include <iostream>

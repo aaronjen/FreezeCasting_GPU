@@ -1,5 +1,4 @@
 #include "Elements.h"
-
 #include <Eigen/Dense>
 using namespace Eigen;
 
