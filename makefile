@@ -1,12 +1,15 @@
-CXX = g++
+CXX = nvcc
 
-CXXFLAGS  = -O2 -std=c++11 -I ./eigen
-CSRCS     = $(wildcard *.cpp)
+CXXFLAGS  = -O2 -std=c++11 -I ./eigen -arch sm_30
+CSRCS     = $(wildcard *.cpp) $(wildcard *.cu)
 CHDRS     = $(wildcard *.h)
 COBJS     = $(addsuffix .o, $(basename $(CSRCS)))
 
 all: $(COBJS)
-	$(CXX) $(CFLAGS) $(COBJS) -o main
+	$(CXX) $(CXXFLAGS) $(COBJS) -o main
+
+FEM.o: FEM.cu FEM.h
+	$(CXX) $(CXXFLAGS) FEM.cu -c
 
 run:
 	./main
