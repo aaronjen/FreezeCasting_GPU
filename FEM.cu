@@ -12,6 +12,147 @@
 using namespace std;
 using namespace Eigen;
 
+// Our Kernel
+
+__global__ void cu_element(double* mM11,
+						   double* mM21,
+						   double* mM22,
+						   double* mK11,
+						   double* mK21,
+						   double* mK22,
+						   double* vF1,
+						   double* aPHI,
+						   double* aU,
+						   int** aaEFT,
+						   int*  numNodePerElement,
+						   uint8_t* elementType,
+						   Coord* nodeCoord,
+						   int numElement,
+						   double tloop,
+						   double epsilon,
+						   double lambda){
+	const double PI = 3.14159265358979323846;
+	const double C_inf = 3;
+	const double k = 0.14;
+	const double G = 140 * 40;
+	const double Ts = 273;
+	const double dT0 = 2.6 * C_inf * (1 - k) / k; // m = 2.6
+	const double T0 = Ts - dT0 / 10;
+	const double Vp = 3000;
+	const double dTn = 8;
+	const double d0 = 5E-3;
+	const double alpha = 3000;
+	const double a1 = 0.8839;
+	const double a2 = 0.6267;
+	const double W0 = d0 * lambda / a1;
+	const double Tau0 = a2 * lambda * W0 * W0 / alpha;
+	const double D = lambda * a2;
+	const int m = 6;
+
+	// gaussian weight are all ones, ignore
+	const double XIs[] = {-0.577350269189626, 0.577350269189626, 0.577350269189626, -0.577350269189626};
+               
+    const double ETAs[] = {-0.577350269189626, -0.577350269189626, 0.577350269189626, 0.577350269189626};
+}
+
+// #define PI 3.14159265358979323846
+void cu_find_matrixs(double lambda,
+					 double tloop,
+					 double epsilon,
+					 int mSize,
+					 const vector<vector<int>>& vvEFT,
+					 const vector<shared_ptr<Element>>& vpFinalElementList,
+					 const vector<Coord>& vdNodeCoord,
+					 const VectorXd& PHI,
+					 const VectorXd& U){
+	double* mM11;
+	cudaMallocManaged((void**)&mM11, sizeof(double)*mSize * mSize);
+
+	double* mM21;
+	cudaMallocManaged((void**)&mM21, sizeof(double)*mSize * mSize);
+
+	double* mM22;
+	cudaMallocManaged((void**)&mM22, sizeof(double)*mSize * mSize);
+
+	double* mK11;
+	cudaMallocManaged((void**)&mK11, sizeof(double)*mSize * mSize);
+
+	double* mK21;
+	cudaMallocManaged((void**)&mK21, sizeof(double)*mSize * mSize);
+
+	double* mK22;
+	cudaMallocManaged((void**)&mK22, sizeof(double)*mSize * mSize);
+
+	double* vF1;
+	cudaMallocManaged((void**)&vF1, sizeof(double)*vdNodeCoord.size());
+	
+
+	size_t numElement = vvEFT.size();
+    int** aaEFT;
+    cudaMallocManaged((void**)&aaEFT, sizeof(int*)*numElement);
+
+    int*  numNodePerElement;
+    cudaMallocManaged((void**)&numNodePerElement, sizeof(int)*numElement);
+
+    uint8_t* elementType;
+    cudaMallocManaged((void**)&elementType, sizeof(uint8_t)*numElement);
+
+    Coord* nodeCoord;
+    cudaMallocManaged((void**)&nodeCoord, sizeof(Coord)*vdNodeCoord.size());
+    copy(vdNodeCoord.begin(), vdNodeCoord.end(), nodeCoord);
+
+    double* aPHI;
+    cudaMallocManaged((void**)&aPHI, sizeof(double)*PHI.size());
+    Map<VectorXd>(aPHI, PHI.size()) = PHI;
+
+    double* aU;
+    cudaMallocManaged((void**)&aU, sizeof(double)*U.size());
+    Map<VectorXd>(aU, U.size()) = U;
+
+    
+    for(unsigned e = 0; e < numElement; ++e){
+    	int _n = vvEFT[e].size();
+    	cudaMallocManaged((void**)&aaEFT[e], sizeof(int)*_n);
+    	copy(vvEFT[e].begin(), vvEFT[e].end(), aaEFT[e]);
+
+    	elementType[e] = (uint8_t)vpFinalElementList[e]->bitElementType.to_ulong();
+    }
+
+    // const int BLOCKSIZE = 512;
+    // const int numBLOCK = ((numElement-1)/BLOCKSIZE + 1);
+    // cu_element<<<numBLOCK, BLOCKSIZE>>>(mM11,
+				// 						mM21,
+				// 						mM22,
+				// 						mK11,
+				// 						mK21,
+				// 						mK22,
+				// 						vF1,
+				// 						aPHI,
+				// 						aU,
+				// 						aaEFT,
+				// 						numNodePerElement,
+				// 						elementType,
+				// 						nodeCoord,
+				// 						numElement,
+				// 						tloop,
+				// 						epsilon,
+				// 						lambda);
+
+    
+    cudaDeviceReset();
+    
+}
+
+
+
+
+
+
+
+
+// Remind :
+// 	Theta not used
+//	
 void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const VectorXd& PHIvelocity, const vector<Coord>& vdNodeCoord, const vector<vector<int>>& vvEFT,
 	const vector<shared_ptr<Element>>& vpFinalElementList,
     double epsilon, double lambda, double tloop, array<double, 9> model,
@@ -19,7 +160,7 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
     SparseMatrix<double>& mK21, SparseMatrix<double>& mK22, VectorXd& vF1) {
     
 	// initialization
-	const double PI = 4 * atan(1.0);
+	const double PI = 3.14159265358979323846;
 	double C_inf = model[0];	// (wt%)
 	double k = model[1];		// 
 	double G = model[2];		// (K/cm)
@@ -40,8 +181,8 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
     vector<T> tripletList_M11, tripletList_M12, tripletList_M21, tripletList_M22, tripletList_K11, tripletList_K12, tripletList_K21, tripletList_K22;
 	int nGp = 2 * 2; // 2 x 2 Gauss point
     MatrixXd LocationsAndWeights = gauss2D(nGp);
-	RowVector2d aniso_parameter;
 	int m = 6;
+
 
 	for (unsigned e = 0; e < vvEFT.size(); e++) {
 		size_t numNodePerElement = vvEFT[e].size();
@@ -50,14 +191,12 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
         MatrixXd elementNodesCoord(numNodePerElement,2); // n x 2
         VectorXd phi(numNodePerElement); // n x 1
         VectorXd u(numNodePerElement); // n x 1
-		VectorXd v(numNodePerElement); // n x 1
 
 		for (unsigned i = 0; i < numNodePerElement; i++) {
 			elementNodesCoord(i, 0) = vdNodeCoord[vvEFT[e][i]].x;
 			elementNodesCoord(i, 1) = vdNodeCoord[vvEFT[e][i]].y;
 			phi(i) = PHI[vvEFT[e][i]];
 			u(i) = U[vvEFT[e][i]];
-			v(i) = PHIvelocity[vvEFT[e][i]];
         }
 		double RealCoord = W0 * 0.25*(elementNodesCoord(0, 1) + elementNodesCoord(1, 1) + elementNodesCoord(2, 1) + elementNodesCoord(3, 1)) * 1E-6; // n x 2 (m)
 		double RealTime = Tau0 * tloop; // (s)
@@ -76,8 +215,6 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
 		double angle = atan2(DERY, DERX);
 		double as = 1 + epsilon * cos(m*(angle - PI / 6)); // A(theta)
 		double asp = -m * epsilon * sin(m*(angle - PI / 6)); // A'(theta)
-		//double as = 1 + epsilon * cos(m*(angle)); // A(theta)
-		//double asp = -m * epsilon * sin(m*(angle)); // A'(theta)
 		double Temperature = T0 + G * 1E2 * (W0 * N0 * elementNodesCoord.col(1) - Vp*RealTime) * 1E-6; // (K)
 		double theta = (Temperature - Ts) / dT0;
 
@@ -116,29 +253,6 @@ void find_matrixs(VectorXd& Theta, const VectorXd& PHI, const VectorXd& U, const
 			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
 				vF1(vvEFT[e][i]) += Fe(i);
         }
-		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		/*for (unsigned i = 0; i<numNodePerElement; i++) {
-			for (unsigned j = 0; j<numNodePerElement; j++) {
-				if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
-					tripletList_C_u1.push_back(T(vvEFT[e][i], vvEFT[e][j], 0.5 * (1 + k) * Ce(i, j)));
-					tripletList_C_u2.push_back(T(vvEFT[e][i], vvEFT[e][j], 0.5 * (1 + (1 - k) * N0 * u) * Ce(i, j)));
-					tripletList_C_u3.push_back(T(vvEFT[e][i], vvEFT[e][j], 0.5 * (0 + (1 - k) * N0 * phi) * Ce(i, j)));
-					tripletList_C_phi.push_back(T(vvEFT[e][i], vvEFT[e][j], (1 - (1 - k) * theta)* as * as * Ce(i, j)));
-
-				}
-				if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
-					tripletList_A_u1.push_back(T(vvEFT[e][i], vvEFT[e][j], D * q(N0 * phi, 0.7) * Ae(i, j)));
-					if (DERX*DERX + DERY*DERY >= 1.0E-12 && N0 * v >= 1.0E-12) tripletList_A_u2.push_back(T(vvEFT[e][i], vvEFT[e][j], (1 + (1 - k) * N0 * u) * (N0 * v + 0) / sqrt(DERX*DERX + DERY*DERY) / 2 / sqrt(2.0) * Ae(i, j)));
-					tripletList_A_phi.push_back(T(vvEFT[e][i], vvEFT[e][j], as * as * Ae(i, j)));
-				}
-				if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
-					tripletList_E_phi.push_back(T(vvEFT[e][i], vvEFT[e][j], as * asp * Ee(i, j)));
-			}
-			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
-				vF_phi(vvEFT[e][i]) += Fe(i);
-			Theta(vvEFT[e][i]) = theta;
-		}*/
-		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     }
 	mM11.setFromTriplets(tripletList_M11.begin(), tripletList_M11.end());
 	mM12.setFromTriplets(tripletList_M12.begin(), tripletList_M12.end());
@@ -235,6 +349,18 @@ void time_discretization(ofstream& fout_time,
 	scheme_time += clock() - t; //<- scheme
 	
 	t = clock(); //-> matrix
+
+	// Call Cuda here!!!!!!!
+	// cu_find_matrixs(lambda,
+	// 				tloop,
+	// 				ephilon,
+	// 				nNode,
+	// 				vvEFT,
+	// 				vpFinalElementList,
+	// 				vdNodeCoord,
+	// 				PHI,
+	// 				U);
+
 	find_matrixs(Theta, PHI, U, PHIvelocity, vdNodeCoord, vvEFT, vpFinalElementList, ephilon, lambda, tloop, model, mM11, mM12, mM21, mM22, mK11, mK12, mK21, mK22, vF1);
 	matrix_time += clock() - t;	 //<- matrix
 
