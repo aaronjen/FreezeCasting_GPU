@@ -1,5 +1,4 @@
 #include "Quadtree.h"
-#include "FEM.h"
 #include "ShapeFunctions.h"
 #include <iostream>
 #include <cmath>
@@ -29,11 +28,9 @@ void Quadtree_Initialization(double Nx, double Ny, unsigned maxLv, double gamma,
 	// Offer containers for elements from level 0 to maxLv
 	vvpLevelElementList.resize(maxLv + 1);
 	// Level 0
-	//cout << "Construct Root:" << endl;
 	Quadtree_ConstructRoot(Nx, Ny, maxLv, vvpLevelElementList);
 
 	// Subdivide Level 1 to maxLv
-	//cout << endl << "Subdivide:" << endl;
 	Quadtree_Subdivide(maxLv, gamma, vvpLevelElementList, option, mPhiCoordinateList, mUCoordinateList, mPhiVelocityCoordinateList, mUVelocityCoordinateList);
 }
 
@@ -426,7 +423,6 @@ bool Element::CheckNeighbors(unsigned maxLv, vector<vector<shared_ptr<Element>>>
 	return true;
 }
 
-
 bool Element::CheckError(int option, map<Coord, double>& mPhiCoordinateList, map<Coord, double>& mUCoordinateList, double gamma) {
 
 	double x_mid = mPhiCoordinateList.crbegin()->first.x / 2.0;
@@ -453,7 +449,7 @@ bool Element::CheckError(int option, map<Coord, double>& mPhiCoordinateList, map
 		}
 		dN = NaturalDerivatives(0, 0, bitset<8>("00001111")); // at mass center
 		B = XYDerivatives(elementNodesCoord, dN);
-		cotangent = get_cotangent(psi, B); // 2x1
+		cotangent = B * psi; // 2x1
 		DERX = cotangent(0);
 		DERY = cotangent(1);
 		return (sqrt(DERX*DERX + DERY*DERY) > 0.3 && acNodalCoordinates[0].x >= 0 && acNodalCoordinates[1].x <= 1638.4 || uLevel <= 1);
@@ -465,23 +461,11 @@ bool Element::CheckError(int option, map<Coord, double>& mPhiCoordinateList, map
 			double rad = x_mid / 256;
 			double seeds = 4;
 			double dist = sqrt(pow(elementNodesCoord(i,0)-x_mid,2.0) + pow(elementNodesCoord(i,1)-y_mid,2.0)) - rad;
-			//double dist = sqrt(pow(elementNodesCoord(i,0),2.0) + pow(elementNodesCoord(i,1),2.0)) - rad;
-			/*double dist = sqrt(pow(elementNodesCoord(i, 0) - x_mid * 2, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad;
-			for (int s = 0; s < seeds; s++)
-				if (sqrt(pow(elementNodesCoord(i, 0) - s * x_mid * 2.0 / seeds, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad < dist)
-					dist = sqrt(pow(elementNodesCoord(i, 0) - s * x_mid * 2.0 / seeds, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad;*/
-			//psi[i] = -tanh(dist/sqrt(2));
-			//if (elementNodesCoord(i, 0) < 0 || elementNodesCoord(i, 0) > 1638.4 || elementNodesCoord(i, 1) > rad)
-			//	psi[i] = -1;
-			//else
-			//	psi[i] = 1;
-			//double dist = elementNodesCoord(i, 1) - rad;
-			//double dist = sqrt(pow(elementNodesCoord(i, 0) - 819.2, 2.0) + pow(elementNodesCoord(i, 1), 2.0)) - rad;
 			psi[i] = -tanh(dist / sqrt(2));
 		}
 		dN = NaturalDerivatives(0, 0, bitset<8>("00001111")); // at mass center
 		B = XYDerivatives(elementNodesCoord, dN);
-		cotangent = get_cotangent(psi, B); // 2x1
+		cotangent = B * psi; // 2x1
 		DERX = cotangent(0);
 		DERY = cotangent(1);
 		return (sqrt(DERX*DERX + DERY*DERY) > 0.01 || uLevel <= 4);
@@ -513,8 +497,6 @@ bool Element::CheckError(int option, map<Coord, double>& mPhiCoordinateList, map
 			cerr << "ERROR!";
 			break;
 		}
-		//f[i] = (x - 3)*(x - 3) + (y - 3)*(y - 3) - abs(x - 3) * (y - 3) - 2;
-		//f[i] = pow((pow(x - 2, 2.0) + pow(y - 2, 2.0) - 1), 3.0) - pow(x - 2, 2.0)*pow(y - 2, 3.0);		
 	}
 
 	if (f[0] * f[1] <= 0 || f[1] * f[2] <= 0 || f[2] * f[3] <= 0 || f[3] * f[0] <= 0 || uLevel <= 0)
@@ -567,12 +549,6 @@ void ReportElement(const vector<vector<shared_ptr<Element>>>& vvpLevelElementLis
 				   vector<vector<int>>& vvEFT,
 				   vector<Coord>& vcNodeCoordinates) {
 
-	//cout << endl << "Please wait for the output..." << endl;
-	//ofstream foutX("output_X.txt");
-	//ofstream foutY("output_Y.txt");
-	//ofstream foutEFT("output_EFT.txt");
-	//ofstream foutNodeCoordinate("output_NodeCoordinate.txt");
-
 	// Initialization
 	vpFinalElementList.clear();
 	vvEFT.clear();
@@ -583,17 +559,9 @@ void ReportElement(const vector<vector<shared_ptr<Element>>>& vvpLevelElementLis
 		for (unsigned e = 0; e < vvpLevelElementList[lv].size(); e++) {
 			if (vvpLevelElementList[lv][e]->apChildren[0] == 0 && vvpLevelElementList[lv][e]->acNodalCoordinates[0].x >= 0 && vvpLevelElementList[lv][e]->acNodalCoordinates[1].x <= 1638.4) {
 				vpFinalElementList.push_back(vvpLevelElementList[lv][e]);
-				//for (int i = 0; i < 4; i++) {
-				//	foutX << vvpLevelElementList[lv][e]->acNodalCoordinates[i].x << endl;
-				//	foutY << vvpLevelElementList[lv][e]->acNodalCoordinates[i].y << endl;
-				//}
 			}
 		}
 	}
-
-	// Output the quantity of elements in each level
-	/*for (unsigned lv = 0; lv < vvpLevelElementList.size(); lv++)
-		cout << endl << "Quantity of Level " << lv << " Elements:\t" << vvpLevelElementList[lv].size();*/
 
 	// Output the global node coordinate list
 	map<unsigned, Coord> mNode2Coord;
@@ -601,9 +569,7 @@ void ReportElement(const vector<vector<shared_ptr<Element>>>& vvpLevelElementLis
 		mNode2Coord[cnNodeCoordinate.second] = cnNodeCoordinate.first; // reverse key and value
 	for (const auto ncNodeCoordinate : mNode2Coord) {
 		vcNodeCoordinates.push_back(Coord(ncNodeCoordinate.second.x, ncNodeCoordinate.second.y));
-		//foutNodeCoordinate << ncNodeCoordinate.second.x << "\t\t" << ncNodeCoordinate.second.y << endl;
 	}
-	//cout << endl << endl << "Quantity of Nodes:\t\t" << mNodeCoordinateList.size() << endl << endl;
 
 	// Output the element freedom table
 	for (const auto pFinalElement : vpFinalElementList) {
@@ -611,17 +577,8 @@ void ReportElement(const vector<vector<shared_ptr<Element>>>& vvpLevelElementLis
 		for (unsigned i = 0; i < 8; i++) {
 			if (pFinalElement->bitElementType.test(i)) {
 				viElementNode.push_back(mNodeCoordinateList[pFinalElement->acNodalCoordinates[i]]);
-				//foutEFT << mNodeCoordinateList[pFinalElement->acNodalCoordinates[i]] << " ";
 			}
 		}
 		vvEFT.push_back(viElementNode);
-		//foutEFT << endl;
 	}
-	//cout << "Quantity of Final Elements:\t" << vpFinalElementList.size() << endl << endl;
-
-	//cout << "Done!" << endl << endl;
-	//foutX.close();
-	//foutY.close();
-	//foutEFT.close();
-	//foutNodeCoordinate.clear();
 }

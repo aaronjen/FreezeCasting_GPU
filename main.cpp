@@ -20,7 +20,7 @@ int main() {
 
 	clock_t t, t_init=clock();
 	unsigned maxLv, tmax, file_skip, mesh_skip;
-	double gamma, dt, delta, ephilon, lambda, D, Nx, Ny;
+	double gamma, dt, delta, epsilon, lambda, D, Nx, Ny;
     double a_12, a_s;
     const double a_2 = 0.6267; 
 	vector<Coord> NodeCoordinates;
@@ -39,41 +39,22 @@ int main() {
 	srand(2);
 	
 	// Read input
-	read_input(a_2, maxLv, gamma, Nx, Ny, file_skip, mesh_skip, tmax, dt, delta, lambda, D, a_12, a_s, ephilon, EFT, Theta, PHI, U, PHIvelocity, Uvelocity,
+	read_input(a_2, maxLv, gamma, Nx, Ny, file_skip, mesh_skip, tmax, dt, delta, lambda, D, a_12, a_s, epsilon, EFT, Theta, PHI, U, PHIvelocity, Uvelocity,
 			   NodeCoordinates, FinalElementList, NodeCoordinateList, LevelElementList, PhiCoordinateList, UCoordinateList, PhiVelocityCoordinateList, UVelocityCoordinateList);
 
 
-
-	SparseMatrix<double> mM11;
-	SparseMatrix<double> mM12;
-	SparseMatrix<double> mM21;
-	SparseMatrix<double> mM22;
-	SparseMatrix<double> mK11;
-	SparseMatrix<double> mK12;
-	SparseMatrix<double> mK21;
-	SparseMatrix<double> mK22;
-	VectorXd vF1;
 	// time marching
 	fout_time << "Start!" << endl;
+
+	// input data
+	FEM fem = FEM(maxLv, gamma, fout_time, Theta, PHI, U, PHIvelocity, Uvelocity, PhiCoordinateList, UCoordinateList, PhiVelocityCoordinateList, UVelocityCoordinateList,NodeCoordinates, EFT, LevelElementList, NodeCoordinateList, FinalElementList);
 	for (unsigned tloop=0; tloop<tmax; tloop++) {
 		//t = clock();
 
 		
 		// Mesh refinement
 		if ((tloop) % mesh_skip == 0){
-			MeshRefinement(maxLv, gamma, fout_time, Theta, PHI, U, PHIvelocity, Uvelocity, PhiCoordinateList, UCoordinateList, PhiVelocityCoordinateList, UVelocityCoordinateList,
-						   NodeCoordinates, EFT, LevelElementList, NodeCoordinateList, FinalElementList);
-			int ncSize = NodeCoordinates.size();
-
-			mM11 = SparseMatrix<double>(ncSize, ncSize);
-			mM12 = SparseMatrix<double>(ncSize, ncSize);
-			mM21 = SparseMatrix<double>(ncSize, ncSize);
-			mM22 = SparseMatrix<double>(ncSize, ncSize);
-			mK11 = SparseMatrix<double>(ncSize, ncSize);
-			mK12 = SparseMatrix<double>(ncSize, ncSize);
-			mK21 = SparseMatrix<double>(ncSize, ncSize);
-			mK22 = SparseMatrix<double>(ncSize, ncSize);
-			vF1 = VectorXd(ncSize);
+			fem.MeshRefinement();
 		}
 
 		t = clock();
@@ -90,8 +71,7 @@ int main() {
 		}
 	
 		// FEM
-		time_discretization(fout_time, 
-			tloop, Theta, PHI, U, PHIvelocity, Uvelocity, dt, D, mM11, mM12, mM21, mM22, mK11, mK12, mK21, mK22, vF1, NodeCoordinates, EFT, FinalElementList, ephilon, lambda);
+		fem.time_discretization(lambda, epsilon, tloop, dt);
 
 		// Output
 		if ((tloop + 1) % file_skip == 0)
