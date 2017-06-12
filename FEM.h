@@ -70,12 +70,12 @@ private:
 
 
 	// create by meshrefinment
-	Eigen::SparseMatrix<double> mM11;
-	Eigen::SparseMatrix<double> mM21;
-	Eigen::SparseMatrix<double> mM22;
-	Eigen::SparseMatrix<double> mK11;
-	Eigen::SparseMatrix<double> mK21;
-	Eigen::SparseMatrix<double> mK22;
+	Eigen::MatrixXd mM11;
+	Eigen::MatrixXd mM21;
+	Eigen::MatrixXd mM22;
+	Eigen::MatrixXd mK11;
+	Eigen::MatrixXd mK21;
+	Eigen::MatrixXd mK22;
 	Eigen::VectorXd vF1;
 };
 

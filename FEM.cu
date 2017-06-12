@@ -186,12 +186,12 @@ void FEM::MeshRefinement() {
 
 	int ncSize = NodeCoordinates.size();
 
-	mM11 = SparseMatrix<double>(ncSize, ncSize);
-	mM21 = SparseMatrix<double>(ncSize, ncSize);
-	mM22 = SparseMatrix<double>(ncSize, ncSize);
-	mK11 = SparseMatrix<double>(ncSize, ncSize);
-	mK21 = SparseMatrix<double>(ncSize, ncSize);
-	mK22 = SparseMatrix<double>(ncSize, ncSize);
+	mM11 = MatrixXd(ncSize, ncSize);
+	mM21 = MatrixXd(ncSize, ncSize);
+	mM22 = MatrixXd(ncSize, ncSize);
+	mK11 = MatrixXd(ncSize, ncSize);
+	mK21 = MatrixXd(ncSize, ncSize);
+	mK22 = MatrixXd(ncSize, ncSize);
 	vF1 = VectorXd(ncSize);
 }
 
@@ -281,32 +281,29 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
 			Ee	   -= (B.row(1).transpose()*B.row(0) - B.row(0).transpose()*B.row(1)) * W * J; // n x n
 			Fe	   += N.transpose() * f(N*phi, N*u, theta, lambda) * W * J; // n x 1
         }
-        // cycle for element matrixs
-		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         for (unsigned i=0; i<numNodePerElement; i++) {
+            int x = EFT[e][i];
             for (unsigned j=0; j<numNodePerElement; j++) {
+            	int y = EFT[e][j];
 				if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
-					tripletList_M22.push_back(T(EFT[e][i], EFT[e][j], Ce(i, j)));
-					tripletList_M21.push_back(T(EFT[e][i], EFT[e][j], -0.5*Ce(i, j)));
-					tripletList_M11.push_back(T(EFT[e][i], EFT[e][j], as * as * Ce(i, j)));
+					mM22(x, y) = Ce(i, j);
+					mM21(x, y) = -0.5*Ce(i, j);
+					mM11(x, y) = as * as * Ce(i, j);
 				}
 				if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
-					tripletList_K22.push_back(T(EFT[e][i], EFT[e][j], -D * q(N0 * phi, 0.7) * Ae(i, j)));
-					tripletList_K11.push_back(T(EFT[e][i], EFT[e][j], -as * as * Ae(i, j)));
+					mK22(x, y) = -D * q(N0 * phi, 0.7) * Ae(i, j);
+					mK11(x, y) = -as * as * Ae(i, j);
 				}
 				if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
-					tripletList_K11.push_back(T(EFT[e][i], EFT[e][j], -as * asp * Ee(i, j)));
+					mK11(x, y) = -as * asp * Ee(i, j);
             }
 			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
-				vF1(EFT[e][i]) += Fe(i);
+				vF1(x) += Fe(i);
         }
     }
-	mM11.setFromTriplets(tripletList_M11.begin(), tripletList_M11.end());
-	mM21.setFromTriplets(tripletList_M21.begin(), tripletList_M21.end());
-	mM22.setFromTriplets(tripletList_M22.begin(), tripletList_M22.end());
-	mK11.setFromTriplets(tripletList_K11.begin(), tripletList_K11.end());
-	mK21.setFromTriplets(tripletList_K21.begin(), tripletList_K21.end());
-	mK22.setFromTriplets(tripletList_K22.begin(), tripletList_K22.end());
+
+    cout << "find matrix done" << endl;
 }
 
 void FEM::time_discretization(
@@ -322,6 +319,7 @@ void FEM::time_discretization(
 	t = clock(); //-> solver
 	BiCGSTAB<SparseMatrix<double> > solver;
 	solver_time += clock() - t; //<- solver
+
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////
 	t = clock(); //-> scheme
@@ -359,6 +357,8 @@ void FEM::time_discretization(
 	if (tloop == 0) {
 		PHIvelocity *= 0;
 		find_matrixs(lambda, epsilon, tloop, dt);
+		cout << "test" << endl;
+
 		SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
 		SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
 		VectorXd F = Up * vF1;
