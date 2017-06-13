@@ -186,31 +186,43 @@ void FEM::MeshRefinement() {
 
 	ncSize = NodeCoordinates.size();
 	
-	//free pointer
-	free(aM11);
-	free(aM21);
-	free(aM22);
-	free(aK11);
-	free(aK21);
-	free(aK22);
-	free(aF1);
+	// free pointer
+	// free(aM11);
+	// free(aM21);
+	// free(aM22);
+	// free(aK11);
+	// free(aK21);
+	// free(aK22);
+	// free(aF1);
 
-	aM11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aM21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aM22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aK11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aK21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aK22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aF1  = (double*)malloc(sizeof(double)*ncSize);
-	cout << ncSize << endl;
-	cout << "allocate done" << endl;
+	// aM11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aM21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aM22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aK11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aK21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aK22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aF1  = (double*)malloc(sizeof(double)*ncSize);
+	
 
-	cout << aM11 << endl;
-	cout << aM21 << endl;
-	cout << aM22 << endl;
-	cout << aK11 << endl;
-	cout << aK21 << endl;
-	cout << aK22 << endl;
+	// cuda pointer
+	cudaFree(aM11);
+	cudaFree(aM21);
+	cudaFree(aM22);
+	cudaFree(aK11);
+	cudaFree(aK21);
+	cudaFree(aK22);
+	cudaFree(aF1);
+
+	cudaMallocManaged(&aM11, sizeof(double)*ncSize*ncSize);
+	cudaMallocManaged(&aM21, sizeof(double)*ncSize*ncSize);
+	cudaMallocManaged(&aM22, sizeof(double)*ncSize*ncSize);
+	cudaMallocManaged(&aK11, sizeof(double)*ncSize*ncSize);
+	cudaMallocManaged(&aK21, sizeof(double)*ncSize*ncSize);
+	cudaMallocManaged(&aK22, sizeof(double)*ncSize*ncSize);
+	cudaMallocManaged(&aF1, sizeof(double)*ncSize);
+
+
+
 }
 
 
@@ -316,20 +328,20 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
         }
 
         for (unsigned i=0; i<numNodePerElement; i++) {
-            int x = EFT[e][i];
+        	int x = EFT[e][i];
             for (unsigned j=0; j<numNodePerElement; j++) {
-            	int y = EFT[e][j];
+				int y = EFT[e][j];
 				if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
-					mM22(x, y) = Ce(i, j);
-					mM21(x, y) = -0.5*Ce(i, j);
-					mM11(x, y) = as * as * Ce(i, j);
+					mM22(x, y) += Ce(i, j);
+					mM21(x, y) += -0.5*Ce(i, j);
+					mM11(x, y) += as * as * Ce(i, j);
 				}
 				if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
-					mK22(x, y) = -D * q(N0 * phi, 0.7) * Ae(i, j);
-					mK11(x, y) = -as * as * Ae(i, j);
+					mK22(x, y) += -D * q(N0 * phi, 0.7) * Ae(i, j);
+					mK11(x, y) += -as * as * Ae(i, j);
 				}
 				if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
-					mK11(x, y) = -as * asp * Ee(i, j);
+					mK11(x, y) += -as * asp * Ee(i, j);
             }
 			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
 				vF1(x) += Fe(i);
@@ -356,7 +368,6 @@ void FEM::time_discretization(
 	double rho = 0;
 	double rhos = 0;
 	double W1L4 = 1 / (1 + rho);
-	// double W2L5 = 1 / ((1 + rho) * (1 + rhos));
 	double W1L6 = (3 + rho + rhos - rho*rhos) / (2 * (1 + rho) * (1 + rhos));
 	double lambda4 = 1;
 	double lambda5 = 1 / (1 + rhos);
@@ -396,8 +407,8 @@ void FEM::time_discretization(
 		SparseMatrix<double> mK22 = Map<MatrixXd>(aK22, ncSize, ncSize).sparseView();
 		Map<VectorXd> vF1(aF1, ncSize);
 
-		SparseMatrix<double> M = (Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right);
-		SparseMatrix<double> K = (Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right);
+		SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
+		SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
 		VectorXd F = Up * vF1;
 		v1 = solver.compute(M).solve(F - K*d1);
 	} else {
@@ -431,13 +442,11 @@ void FEM::time_discretization(
 	SparseMatrix<double> mK22 = Map<MatrixXd>(aK22, ncSize, ncSize).sparseView();
 	Map<VectorXd> vF1(aF1, ncSize);
 
-	cout << mM11.nonZeros() << endl;
-
 	matrix_time += clock() - t;	 //<- matrix
 
 	t = clock(); //-> scheme
-	SparseMatrix<double> M = (Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right);
-	SparseMatrix<double> K = (Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right);
+	SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
+	SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
 	VectorXd F = Up * vF1;
 	scheme_time += clock() - t; //<- scheme
 
