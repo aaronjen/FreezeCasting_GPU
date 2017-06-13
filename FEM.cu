@@ -284,21 +284,23 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
         // cycle for element matrixs
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         for (unsigned i=0; i<numNodePerElement; i++) {
+        	int x = EFT[e][i];
             for (unsigned j=0; j<numNodePerElement; j++) {
+            	int y = EFT[e][j];
 				if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
-					tripletList_M22.push_back(T(EFT[e][i], EFT[e][j], Ce(i, j)));
-					tripletList_M21.push_back(T(EFT[e][i], EFT[e][j], -0.5*Ce(i, j)));
-					tripletList_M11.push_back(T(EFT[e][i], EFT[e][j], as * as * Ce(i, j)));
+					tripletList_M22.push_back(T(x, y, Ce(i, j)));
+					tripletList_M21.push_back(T(x, y, -0.5*Ce(i, j)));
+					tripletList_M11.push_back(T(x, y, as * as * Ce(i, j)));
 				}
 				if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
-					tripletList_K22.push_back(T(EFT[e][i], EFT[e][j], -D * q(N0 * phi, 0.7) * Ae(i, j)));
-					tripletList_K11.push_back(T(EFT[e][i], EFT[e][j], -as * as * Ae(i, j)));
+					tripletList_K22.push_back(T(x, y, -D * q(N0 * phi, 0.7) * Ae(i, j)));
+					tripletList_K11.push_back(T(x, y, -as * as * Ae(i, j)));
 				}
 				if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
-					tripletList_K11.push_back(T(EFT[e][i], EFT[e][j], -as * asp * Ee(i, j)));
+					tripletList_K11.push_back(T(x, y, -as * asp * Ee(i, j)));
             }
 			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
-				vF1(EFT[e][i]) += Fe(i);
+				vF1(x) += Fe(i);
         }
     }
 	mM11.setFromTriplets(tripletList_M11.begin(), tripletList_M11.end());
