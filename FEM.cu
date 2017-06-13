@@ -184,15 +184,33 @@ void FEM::MeshRefinement() {
 	//fout_time << NodeCoordinateList.size() << "\tNodes" << endl;
 	//fout_time << endl;
 
-	int ncSize = NodeCoordinates.size();
+	ncSize = NodeCoordinates.size();
+	
+	//free pointer
+	free(aM11);
+	free(aM21);
+	free(aM22);
+	free(aK11);
+	free(aK21);
+	free(aK22);
+	free(aF1);
 
-	mM11 = MatrixXd(ncSize, ncSize);
-	mM21 = MatrixXd(ncSize, ncSize);
-	mM22 = MatrixXd(ncSize, ncSize);
-	mK11 = MatrixXd(ncSize, ncSize);
-	mK21 = MatrixXd(ncSize, ncSize);
-	mK22 = MatrixXd(ncSize, ncSize);
-	vF1 = VectorXd(ncSize);
+	aM11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	aM21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	aM22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	aK11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	aK21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	aK22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	aF1  = (double*)malloc(sizeof(double)*ncSize);
+	cout << ncSize << endl;
+	cout << "allocate done" << endl;
+
+	cout << aM11 << endl;
+	cout << aM21 << endl;
+	cout << aM22 << endl;
+	cout << aK11 << endl;
+	cout << aK21 << endl;
+	cout << aK22 << endl;
 }
 
 
@@ -202,6 +220,8 @@ void FEM::MeshRefinement() {
 // 	Theta not used
 //	
 void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt) {
+	
+
 	// initialization
 	const double PI = 3.14159265358979323846;
 	double C_inf = 3;	// (wt%)
@@ -219,13 +239,26 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
 	double Tau0 = a2 * lambda * W0 * W0 / alpha; // (s)
 	double D = lambda * a2;
 
-	mM11.setZero(); mM21.setZero(); mM22.setZero(); mK11.setZero(); mK21.setZero(); mK22.setZero(); vF1.setZero();
-    typedef Triplet<double> T;
-    vector<T> tripletList_M11, tripletList_M12, tripletList_M21, tripletList_M22, tripletList_K11, tripletList_K12, tripletList_K21, tripletList_K22;
+	
+	Map<MatrixXd> mM11(aM11, ncSize, ncSize);
+	Map<MatrixXd> mM21(aM21, ncSize, ncSize);
+	Map<MatrixXd> mM22(aM22, ncSize, ncSize);
+	Map<MatrixXd> mK11(aK11, ncSize, ncSize);
+	Map<MatrixXd> mK21(aK21, ncSize, ncSize);
+	Map<MatrixXd> mK22(aK22, ncSize, ncSize);
+	Map<VectorXd> vF1(aF1, ncSize);
+
+	mM11 = MatrixXd::Zero(ncSize, ncSize);
+	mM21 = MatrixXd::Zero(ncSize, ncSize);
+	mM22 = MatrixXd::Zero(ncSize, ncSize);
+	mK11 = MatrixXd::Zero(ncSize, ncSize);
+	mK21 = MatrixXd::Zero(ncSize, ncSize);
+	mK22 = MatrixXd::Zero(ncSize, ncSize);
+	vF1  = VectorXd::Zero(ncSize);
+
 	int nGp = 2 * 2; // 2 x 2 Gauss point
     MatrixXd LocationsAndWeights = gauss2D(nGp);
 	int m = 6;
-
 
 	double RealTime = Tau0 * tloop; // (s)
 
@@ -302,8 +335,6 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
 				vF1(x) += Fe(i);
         }
     }
-
-    cout << "find matrix done" << endl;
 }
 
 void FEM::time_discretization(
@@ -320,7 +351,6 @@ void FEM::time_discretization(
 	BiCGSTAB<SparseMatrix<double> > solver;
 	solver_time += clock() - t; //<- solver
 
-
 	///////////////////////////////////////////////////////////////////////////////////////////////////
 	t = clock(); //-> scheme
 	double rho = 0;
@@ -330,7 +360,7 @@ void FEM::time_discretization(
 	double W1L6 = (3 + rho + rhos - rho*rhos) / (2 * (1 + rho) * (1 + rhos));
 	double lambda4 = 1;
 	double lambda5 = 1 / (1 + rhos);
-	unsigned nNode = mM11.rows();
+	unsigned nNode = ncSize;
 
 	typedef Triplet<double> T;
 	vector<T> tripletList_q;
@@ -357,10 +387,17 @@ void FEM::time_discretization(
 	if (tloop == 0) {
 		PHIvelocity *= 0;
 		find_matrixs(lambda, epsilon, tloop, dt);
-		cout << "test" << endl;
 
-		SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
-		SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
+		SparseMatrix<double> mM11 = Map<MatrixXd>(aM11, ncSize, ncSize).sparseView();
+		SparseMatrix<double> mM21 = Map<MatrixXd>(aM21, ncSize, ncSize).sparseView();
+		SparseMatrix<double> mM22 = Map<MatrixXd>(aM22, ncSize, ncSize).sparseView();
+		SparseMatrix<double> mK11 = Map<MatrixXd>(aK11, ncSize, ncSize).sparseView();
+		SparseMatrix<double> mK21 = Map<MatrixXd>(aK21, ncSize, ncSize).sparseView();
+		SparseMatrix<double> mK22 = Map<MatrixXd>(aK22, ncSize, ncSize).sparseView();
+		Map<VectorXd> vF1(aF1, ncSize);
+
+		SparseMatrix<double> M = (Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right);
+		SparseMatrix<double> K = (Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right);
 		VectorXd F = Up * vF1;
 		v1 = solver.compute(M).solve(F - K*d1);
 	} else {
@@ -386,11 +423,21 @@ void FEM::time_discretization(
 	// 				U);
 
 	find_matrixs(lambda, epsilon, tloop, dt);
+	SparseMatrix<double> mM11 = Map<MatrixXd>(aM11, ncSize, ncSize).sparseView();
+	SparseMatrix<double> mM21 = Map<MatrixXd>(aM21, ncSize, ncSize).sparseView();
+	SparseMatrix<double> mM22 = Map<MatrixXd>(aM22, ncSize, ncSize).sparseView();
+	SparseMatrix<double> mK11 = Map<MatrixXd>(aK11, ncSize, ncSize).sparseView();
+	SparseMatrix<double> mK21 = Map<MatrixXd>(aK21, ncSize, ncSize).sparseView();
+	SparseMatrix<double> mK22 = Map<MatrixXd>(aK22, ncSize, ncSize).sparseView();
+	Map<VectorXd> vF1(aF1, ncSize);
+
+	cout << mM11.nonZeros() << endl;
+
 	matrix_time += clock() - t;	 //<- matrix
 
 	t = clock(); //-> scheme
-	SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
-	SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
+	SparseMatrix<double> M = (Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right);
+	SparseMatrix<double> K = (Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right);
 	VectorXd F = Up * vF1;
 	scheme_time += clock() - t; //<- scheme
 

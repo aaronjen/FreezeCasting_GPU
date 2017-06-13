@@ -68,15 +68,23 @@ private:
 	std::map<Coord, unsigned>& NodeCoordinateList;
 	std::vector<std::shared_ptr<Element>>& FinalElementList;
 
-
 	// create by meshrefinment
-	Eigen::MatrixXd mM11;
-	Eigen::MatrixXd mM21;
-	Eigen::MatrixXd mM22;
-	Eigen::MatrixXd mK11;
-	Eigen::MatrixXd mK21;
-	Eigen::MatrixXd mK22;
-	Eigen::VectorXd vF1;
+	// Eigen::MatrixXd mM11;
+	// Eigen::MatrixXd mM21;
+	// Eigen::MatrixXd mM22;
+	// Eigen::MatrixXd mK11;
+	// Eigen::MatrixXd mK21;
+	// Eigen::MatrixXd mK22;
+	// Eigen::VectorXd vF1;
+
+	int ncSize = 0;
+	double* aM11 = 0;
+	double* aM21 = 0;
+	double* aM22 = 0;
+	double* aK11 = 0;
+	double* aK21 = 0;
+	double* aK22 = 0;
+	double* aF1 = 0;
 };
 
 
