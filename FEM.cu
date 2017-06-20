@@ -185,24 +185,6 @@ void FEM::MeshRefinement() {
 	//fout_time << endl;
 
 	ncSize = NodeCoordinates.size();
-	
-	// free pointer
-	// free(aM11);
-	// free(aM21);
-	// free(aM22);
-	// free(aK11);
-	// free(aK21);
-	// free(aK22);
-	// free(aF1);
-
-	// aM11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	// aM21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	// aM22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	// aK11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	// aK21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	// aK22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	// aF1  = (double*)malloc(sizeof(double)*ncSize);
-	
 
 	// cuda pointer
 	cudaFree(aM11);
@@ -226,11 +208,6 @@ void FEM::MeshRefinement() {
 }
 
 
-
-
-// Remind :
-// 	Theta not used
-//	
 void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt) {
 	
 
