@@ -12,6 +12,13 @@
 using namespace std;
 using namespace Eigen;
 
+__device__ __host__ int CeilDiv(int a, int b) { return (a-1)/b + 1; }
+__device__ __host__ int CeilAlign(int a, int b) { return CeilDiv(a, b) * b; }
+
+#define BLOCK_SIZE 256
+#define BLOCK_WARP 8
+
+
 // Our Kernel
 // __global__ void cu_element(double* mM11,
 // 						   double* mM21,
@@ -60,96 +67,116 @@ using namespace Eigen;
 //     VectorXd u(n); // n x 1
 
 // }
-
-// #define PI 3.14159265358979323846
-void cu_find_matrixs(double lambda,
-					 double tloop,
-					 double epsilon,
-					 int mSize,
-					 const vector<vector<int>>& EFT,
-					 const vector<shared_ptr<Element>>& FinalElementList,
-					 const vector<Coord>& NodeCoordinates,
-					 const VectorXd& PHI,
-					 const VectorXd& U){
-	double* mM11;
-	cudaMalloc((void**)&mM11, sizeof(double)*mSize * mSize);
-
-	// double* mM21;
-	// cudaMallocManaged((void**)&mM21, sizeof(double)*mSize * mSize);
-
-	// double* mM22;
-	// cudaMallocManaged((void**)&mM22, sizeof(double)*mSize * mSize);
-
-	// double* mK11;
-	// cudaMallocManaged((void**)&mK11, sizeof(double)*mSize * mSize);
-
-	// double* mK21;
-	// cudaMallocManaged((void**)&mK21, sizeof(double)*mSize * mSize);
-
-	// double* mK22;
-	// cudaMallocManaged((void**)&mK22, sizeof(double)*mSize * mSize);
-
-	// double* vF1;
-	// cudaMallocManaged((void**)&vF1, sizeof(double)*NodeCoordinates.size());
+/*
+__global__ void cu_find_matrixs(double lambda,
+	double tloop,
+	double epsilon,
+	const vector<vector<int>>& EFT,
+	const vector<shared_ptr<Element>>& FinalElementList,
+	const vector<Coord>& NodeCoordinates,
+	const VectorXd& PHI,
+	const VectorXd& U,
+	Map<MatrixXd> mM11,
+	Map<MatrixXd> mM21,
+	Map<MatrixXd> mM22,
+	Map<MatrixXd> mK11,
+	Map<MatrixXd> mK21,
+	Map<MatrixXd> mK22,
+	Map<VectorXd> vF1
+){
 	
+	int e = blockIdx.x * blockDim.x + threadIdx.x;
+	if (e < EFT.size()){
+	const double PI = 3.14159265358979323846;
+        double C_inf = 3;       // (wt%)
+        double k = 0.14;                // 
+        double G = 140 * 40;            // (K/cm)
+        double d0 = 5E-3;               // (1E-6m)
+        double alpha = 3000;    // (1E-6m2/s)
+        double Vp = 3000;               // (1E-6m/s)
+        double Ts = 273;                // (K)
+        double dT0 = 2.6 * C_inf * (1 - k) / k;         // (K)
+        double T0 = Ts - dT0 / 10;              // (K)
+        double a1 = 0.8839;
+        double a2 = 0.6267;
+        double W0 = d0 * lambda / a1; // (1E-6m)
+        double Tau0 = a2 * lambda * W0 * W0 / alpha; // (s)
+        double D = lambda * a2;
+	int nGp = 2 * 2; // 2 x 2 Gauss point
+        MatrixXd LocationsAndWeights = gauss2D(nGp);
+        int m = 6;
+        double RealTime = Tau0 * tloop; // (s)
 
-	// size_t numElement = EFT.size();
- //    int** aaEFT;
- //    cudaMallocManaged((void**)&aaEFT, sizeof(int*)*numElement);
+	size_t numNodePerElement = EFT[e].size();
+	bitset<8> bitElementType = FinalElementList[e]->bitElementType;
+	MatrixXd elementNodesCoord(numNodePerElement,2);
+	VectorXd phi(numNodePerElement);
+	VectorXd u(numNodePerElement);
 
- //    int*  numNodePerElement;
- //    cudaMallocManaged((void**)&numNodePerElement, sizeof(int)*numElement);
+	for (unsigned i = 0; i < numNodePerElement; i++) {
+		int nodeSerial = EFT[e][i];
+		elementNodesCoord(i, 0) = NodeCoordinates[nodeSerial].x;
+		elementNodesCoord(i, 1) = NodeCoordinates[nodeSerial].y;
+		phi(i) = PHI[nodeSerial];
+		u(i) = U[nodeSerial];
+	}
+	double RealCoord = W0 * 0.25*(elementNodesCoord(0, 1) + elementNodesCoord(1, 1) + elementNodesCoord(2, 1) + elementNodesCoord(3, 1)) * 1E-6;
 
- //    uint8_t* elementType;
- //    cudaMallocManaged((void**)&elementType, sizeof(uint8_t)*numElement);
+	MatrixXd Ce = MatrixXd::Zero(numNodePerElement, numNodePerElement);
+	MatrixXd Ae = MatrixXd::Zero(numNodePerElement, numNodePerElement);
+	MatrixXd Ee = MatrixXd::Zero(numNodePerElement, numNodePerElement);
+	VectorXd Fe = VectorXd::Zero(numNodePerElement); // n x 1
+	RowVectorXd N0 = ShapeFunction(0, 0, bitElementType);
+	MatrixXd dN0 = NaturalDerivatives(0, 0, bitElementType); // 2 x n
+	MatrixXd B0 = XYDerivatives(elementNodesCoord, dN0); // 2 x n
+	MatrixXd cotangent = get_cotangent(phi, B0); // 2 x 1
+	double DERX = cotangent(0);
+	double DERY = cotangent(1);
+	double angle = atan2(DERY, DERX);
+	double as = 1 + epsilon * cos(m*(angle - PI / 6)); // A(theta)
+	double asp = -m * epsilon * sin(m*(angle - PI / 6)); // A'(theta)
+	double Temperature = T0 + G * 1E2 * (W0 * N0 * elementNodesCoord.col(1) - Vp*RealTime) * 1E-6; // (K)
+	double theta = (Temperature - Ts) / dT0;
 
- //    for(unsigned e = 0; e < numElement; ++e){
- //    	int _n = EFT[e].size();
- //    	numNodePerElement[e] = _n;
- //    	cudaMallocManaged((void**)&aaEFT[e], sizeof(int)*_n);
- //    	copy(EFT[e].begin(), EFT[e].end(), aaEFT[e]);
-
- //    	elementType[e] = (uint8_t)FinalElementList[e]->bitElementType.to_ulong();
- //    }
-
- //    Coord* nodeCoord;
- //    cudaMallocManaged((void**)&nodeCoord, sizeof(Coord)*NodeCoordinates.size());
- //    copy(NodeCoordinates.begin(), NodeCoordinates.end(), nodeCoord);
-
- //    double* aPHI;
- //    cudaMallocManaged((void**)&aPHI, sizeof(double)*PHI.size());
- //    Map<VectorXd>(aPHI, PHI.size()) = PHI;
-
- //    double* aU;
- //    cudaMallocManaged((void**)&aU, sizeof(double)*U.size());
- //    Map<VectorXd>(aU, U.size()) = U;
-
-    // const int BLOCKSIZE = 512;
-    // const int numBLOCK = ((numElement-1)/BLOCKSIZE + 1);
-    // cu_element<<<numBLOCK, BLOCKSIZE>>>(mM11,
-				// 						mM21,
-				// 						mM22,
-				// 						mK11,
-				// 						mK21,
-				// 						mK22,
-				// 						vF1,
-				// 						aPHI,
-				// 						aU,
-				// 						aaEFT,
-				// 						numNodePerElement,
-				// 						elementType,
-				// 						nodeCoord,
-				// 						numElement,
-				// 						tloop,
-				// 						epsilon,
-				// 						lambda);
-
-    
-    cudaDeviceReset();
-    
+	for (int q=0; q<nGp; q++) {
+		double xi = LocationsAndWeights(q,0);
+		double eta = LocationsAndWeights(q,1);
+		double W = LocationsAndWeights(q,2);
+		RowVectorXd N = ShapeFunction(xi, eta, bitElementType); // 1 x n
+		MatrixXd dN = NaturalDerivatives(xi, eta, bitElementType); // 2 x n
+		MatrixXd B = XYDerivatives(elementNodesCoord, dN); // 2 x n
+		double J = detJacobian(elementNodesCoord, dN); // 1 x 1
+                // matrixs of a element
+		Ce     += N.transpose() * N * W * J; // n x n
+		Ae     -= B.transpose() * B * W * J; // n x n
+		Ee         -= (B.row(1).transpose()*B.row(0) - B.row(0).transpose()*B.row(1)) * W * J; // n x n
+		Fe         += N.transpose() * f(N*phi, N*u, theta, lambda) * W * J; // n x 1
+	}
+	
+	for (unsigned i=0; i<numNodePerElement; i++) {
+		int x = EFT[e][i];
+		for (unsigned j=0; j<numNodePerElement; j++) {
+			int y = EFT[e][j];
+			if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
+				mM22(x, y) += Ce(i, j);
+				mM21(x, y) += -0.5*Ce(i, j);
+				mM11(x, y) += as * as * Ce(i, j);
+			}
+			if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
+				mK22(x, y) += -D * q(N0 * phi, 0.7) * Ae(i, j);
+				mK11(x, y) += -as * as * Ae(i, j);
+			}
+			if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
+				mK11(x, y) += -as * asp * Ee(i, j);
+		}
+		if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
+			vF1(x) += Fe(i);
+	}
+	cudaDeviceReset();
+    	}
 }
 
-
+*/
 
 void FEM::MeshRefinement() {
 	PhiCoordinateList.clear();
@@ -246,20 +273,25 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
 	vF1  = VectorXd::Zero(ncSize);
 
 	int nGp = 2 * 2; // 2 x 2 Gauss point
-    MatrixXd LocationsAndWeights = gauss2D(nGp);
+	MatrixXd LocationsAndWeights = gauss2D(nGp);
 	int m = 6;
-
 	double RealTime = Tau0 * tloop; // (s)
-
+	/*if (EFT.size()>=BLOCK_SIZE){
+		int GRID_SIZE=CeilDiv(EFT.size(),BLOCK_SIZE);
+		cu_find_matrixs<<<EFT.size(),BLOCK_SIZE>>>(lambda,tloop,epsilon,EFT,
+							   FinalElementList,NodeCoordinates,PHI,U,
+        						   mM11,mM21,mM22,mK11,mK21,mK22,vF1);
+	}
+	else {*/
 	for (unsigned e = 0; e < EFT.size(); e++) {
 		size_t numNodePerElement = EFT[e].size();
 		bitset<8> bitElementType = FinalElementList[e]->bitElementType;
-        // get the coordinates of the nodes in the element
-        MatrixXd elementNodesCoord(numNodePerElement,2); // n x 2
-        VectorXd phi(numNodePerElement); // n x 1
-        VectorXd u(numNodePerElement); // n x 1
+	// get the coordinates of the nodes in the element
+		MatrixXd elementNodesCoord(numNodePerElement,2); // n x 2
+		VectorXd phi(numNodePerElement); // n x 1
+		VectorXd u(numNodePerElement); // n x 1
 
-        // element info
+	// element info
 		for (unsigned i = 0; i < numNodePerElement; i++) {
 			int nodeSerial = EFT[e][i];
 
@@ -267,7 +299,7 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
 			elementNodesCoord(i, 1) = NodeCoordinates[nodeSerial].y;
 			phi(i) = PHI[nodeSerial];
 			u(i) = U[nodeSerial];
-        }
+        	}
 		double RealCoord = W0 * 0.25*(elementNodesCoord(0, 1) + elementNodesCoord(1, 1) + elementNodesCoord(2, 1) + elementNodesCoord(3, 1)) * 1E-6; // n x 2 (m)
 		
 		MatrixXd Ce = MatrixXd::Zero(numNodePerElement, numNodePerElement);
@@ -288,25 +320,25 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
 		double theta = (Temperature - Ts) / dT0;
 
 		// cycle for Gauss point
-        for (int q=0; q<nGp; q++) {
-            double xi = LocationsAndWeights(q,0);
-            double eta = LocationsAndWeights(q,1);
-            double W = LocationsAndWeights(q,2);
+		for (int q=0; q<nGp; q++) {
+			double xi = LocationsAndWeights(q,0);
+			double eta = LocationsAndWeights(q,1);
+			double W = LocationsAndWeights(q,2);
 			RowVectorXd N = ShapeFunction(xi, eta, bitElementType); // 1 x n
 			MatrixXd dN = NaturalDerivatives(xi, eta, bitElementType); // 2 x n
 			MatrixXd B = XYDerivatives(elementNodesCoord, dN); // 2 x n
 			double J = detJacobian(elementNodesCoord, dN); // 1 x 1
-
-            // matrixs of a element
-            Ce     += N.transpose() * N * W * J; // n x n
-            Ae     -= B.transpose() * B * W * J; // n x n
+		
+		// matrixs of a element
+			Ce     += N.transpose() * N * W * J; // n x n
+			Ae     -= B.transpose() * B * W * J; // n x n
 			Ee	   -= (B.row(1).transpose()*B.row(0) - B.row(0).transpose()*B.row(1)) * W * J; // n x n
 			Fe	   += N.transpose() * f(N*phi, N*u, theta, lambda) * W * J; // n x 1
-        }
+		}
 
-        for (unsigned i=0; i<numNodePerElement; i++) {
-        	int x = EFT[e][i];
-            for (unsigned j=0; j<numNodePerElement; j++) {
+		for (unsigned i=0; i<numNodePerElement; i++) {
+			int x = EFT[e][i];
+			for (unsigned j=0; j<numNodePerElement; j++) {
 				int y = EFT[e][j];
 				if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
 					mM22(x, y) += Ce(i, j);
@@ -319,11 +351,13 @@ void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt)
 				}
 				if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
 					mK11(x, y) += -as * asp * Ee(i, j);
-            }
+			}
 			if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
 				vF1(x) += Fe(i);
-        }
-    }
+        	}
+	//}
+	}
+
 }
 
 void FEM::time_discretization(
@@ -462,14 +496,14 @@ MatrixXd get_cotangent(const VectorXd& phi, const MatrixXd& B) {
 }
 
 // g'(phi) - lambda*U*P'(phi)
-double f(double phi, double u, double theta, double lambda) {
+__device__ __host__ double f(double phi, double u, double theta, double lambda) {
 	return phi * (1 - phi*phi) - lambda * u * pow(1 - phi*phi, 2.0);
 	//return phi * (1 - phi*phi) - lambda * pow(1 - phi*phi, 2.0) * (u + 0.9 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
 	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta);
 	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta + 0.3 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
 }
 
-double q(double phi, double k) {
+__device__ __host__ double q(double phi, double k) {
 	//return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi);
 	return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi) + (1 + phi) * 0.2 / 2;
 	//return (phi >= 1) ? 0 : (1 - phi) / 2;
