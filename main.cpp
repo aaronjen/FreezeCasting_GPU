@@ -17,7 +17,6 @@ using namespace Eigen;
 
 
 int main() {
-
 	clock_t t, t_init=clock();
 	unsigned maxLv, tmax, file_skip, mesh_skip;
 	double gamma, dt, delta, epsilon, lambda, D, Nx, Ny;

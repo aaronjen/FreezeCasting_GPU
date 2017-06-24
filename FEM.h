@@ -47,7 +47,9 @@ public:
 
 	void MeshRefinement();
 	void find_matrixs(double lambda, double epsilon,unsigned tloop, double dt);
+	void cu_find_matrixs(double lambda, double epsilon,unsigned tloop, double dt);
 	void time_discretization(double lambda, double epsilon,unsigned tloop, double dt);
+
 
 private:
 	unsigned maxLv;
@@ -69,14 +71,6 @@ private:
 	std::vector<std::shared_ptr<Element>>& FinalElementList;
 
 	// create by meshrefinment
-	// Eigen::MatrixXd mM11;
-	// Eigen::MatrixXd mM21;
-	// Eigen::MatrixXd mM22;
-	// Eigen::MatrixXd mK11;
-	// Eigen::MatrixXd mK21;
-	// Eigen::MatrixXd mK22;
-	// Eigen::VectorXd vF1;
-
 	int ncSize = 0;
 	double* aM11 = 0;
 	double* aM21 = 0;
@@ -85,6 +79,9 @@ private:
 	double* aK21 = 0;
 	double* aK22 = 0;
 	double* aF1 = 0;
+
+	double* aPHI = 0;
+	double* aU = 0;
 };
 
 
