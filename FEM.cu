@@ -38,6 +38,8 @@ void FEM::MeshRefinement() {
 	ReportElement(LevelElementList, FinalElementList, NodeCoordinateList, EFT, NodeCoordinates);
 
 	ncSize = NodeCoordinates.size();
+	elemSize = EFT.size();
+
 
 	PHI.setZero(ncSize);
 	U.setZero(ncSize);
@@ -56,20 +58,14 @@ void FEM::MeshRefinement() {
 	//fout_time << NodeCoordinateList.size() << "\tNodes" << endl;
 	//fout_time << endl;
 
-	// const VectorXd& PHI,
-	// const VectorXd& U,
-	// const vector<vector<int>>& EFT,
-	// const vector<shared_ptr<Element>>& FinalElementList,
-	// const vector<Coord>& NodeCoordinates,
-
 	cudaFree(aPHI);
 	cudaFree(aU);
+	cudaFree(aEFT);
+	cudaFree(aNodeNum);
+	cudaFree(elementType);
+	cudaFree(aCoordX);
+	cudaFree(aCoordY);
 
-	cudaMalloc(&aPHI, sizeof(double)*ncSize);
-	cudaMalloc(&aU, sizeof(double)*ncSize);
-	
-
-	// cuda pointer
 	cudaFree(aM11);
 	cudaFree(aM21);
 	cudaFree(aM22);
@@ -77,6 +73,31 @@ void FEM::MeshRefinement() {
 	cudaFree(aK21);
 	cudaFree(aK22);
 	cudaFree(aF1);
+
+	// cudaMallocManaged(&aPHI, sizeof(double)*ncSize);
+	// cudaMallocManaged(&aU, sizeof(double)*ncSize);
+	// cudaMallocManaged(&aEFT, sizeof(int)*elemSize*8); //Element at max 8 nodes
+	// cudaMallocManaged(&aNodeNum, sizeof(int)*elemSize);
+	// cudaMallocManaged(&elementType, sizeof(char)*elemSize);
+	// cudaMallocManaged(&aCoordX, sizeof(double)*ncSize);
+	// cudaMallocManaged(&aCoordY, sizeof(double)*ncSize);
+
+	// // copy EFT to array
+	// for(int i = 0; i < elemSize; ++i){
+	// 	aNodeNum[i] = EFT[i].size();
+	// 	for(int j = 0; j < EFT[i].size(); ++j){
+	// 		aEFT[i*8+j] = EFT[i][j];
+	// 	}
+
+	// 	elementType[i] = (unsigned char)FinalElementList[i]->bitElementType.to_ulong();
+	// }
+
+	// //copy elementType to array
+	// for(int i = 0; i < ncSize; ++i){
+	// 	aCoordX[i] = NodeCoordinates[i].x;
+	// 	aCoordY[i] = NodeCoordinates[i].y;
+	// }
+
 
 	cudaMallocManaged(&aM11, sizeof(double)*ncSize*ncSize);
 	cudaMallocManaged(&aM21, sizeof(double)*ncSize*ncSize);
@@ -339,8 +360,6 @@ void FEM::cu_find_matrixs(double lambda, double epsilon, unsigned tloop, double 
 
 	cudaMemcpy(aPHI, PHI.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(aU, U.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
-
-
 }
 
 

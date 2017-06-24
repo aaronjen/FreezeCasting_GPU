@@ -72,6 +72,16 @@ private:
 
 	// create by meshrefinment
 	int ncSize = 0;
+	int elemSize = 0;
+
+	double* aPHI = 0;
+	double* aU = 0;
+	int* aEFT = 0;
+	int* aNodeNum = 0;
+	unsigned char* elementType = 0;
+	double* aCoordX = 0;
+	double* aCoordY = 0;
+
 	double* aM11 = 0;
 	double* aM21 = 0;
 	double* aM22 = 0;
@@ -80,8 +90,7 @@ private:
 	double* aK22 = 0;
 	double* aF1 = 0;
 
-	double* aPHI = 0;
-	double* aU = 0;
+
 };
 
 

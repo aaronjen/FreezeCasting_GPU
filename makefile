@@ -1,6 +1,6 @@
 CXX = nvcc
 
-CXXFLAGS  = -O2 -std=c++11 -I ./eigen -arch sm_30
+CXXFLAGS  = -O2 -std=c++11 -I ./eigen -arch sm_35 -g
 CSRCS     = $(wildcard *.cpp) $(wildcard *.cu)
 CHDRS     = $(wildcard *.h)
 COBJS     = $(addsuffix .o, $(basename $(CSRCS)))

@@ -7,7 +7,6 @@
 #include <ctime>
 #include <cstdlib>
 #include "Variables.h"
-#include "ShapeFunctions.h"
 #include "FEM.h"
 #include "GaussPoints.h"
 #include "Quadtree.h"
