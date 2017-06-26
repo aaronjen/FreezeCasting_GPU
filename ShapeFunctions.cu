@@ -6,8 +6,57 @@
 using namespace std;
 using namespace Eigen;
 
+__device__ __device__ RowVectorXd ShapeFunction(double xi, double eta, char bitElementType) {
+	array<double, 8> Ni = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	Ni[7] = (1 - eta*eta) * (1 - xi) / 2; // N8
+	Ni[6] = (1 - xi*xi) * (1 + eta) / 2;  // N7
+	Ni[5] = (1 - eta*eta) * (1 + xi) / 2; // N6
+	Ni[4] = (1 - xi*xi) * (1 - eta) / 2;  // N5
+	int numberOfNodes = 0;
+	for (int i=0; i<8; ++i){
+		if (bitElementType & (1 << i)) ++numberOfNodes;
+		else (Ni[i]=0);
+	}
+	Ni[3] = (1 - xi) * (1 + eta) / 4 - (Ni[6] + Ni[7]) / 2; // N4 - (N7 + N8) / 2
+	Ni[2] = (1 + xi) * (1 + eta) / 4 - (Ni[5] + Ni[6]) / 2; // N3 - (N6 + N7) / 2
+	Ni[1] = (1 + xi) * (1 - eta) / 4 - (Ni[4] + Ni[5]) / 2; // N2 - (N5 + N6) / 2
+	Ni[0] = (1 - xi) * (1 - eta) / 4 - (Ni[7] + Ni[4]) / 2; // N1 - (N8 + N5) / 2
+	RowVectorXd shape(numberOfNodes); // 1 x n
+	for (int i=0; i<numberOfNodes; ++i) if(Ni[i]!=0) shape<<Ni[i]; 
+	return shape;
+}
 
-__device__ __host__ RowVectorXd ShapeFunction(double xi, double eta, bitset<8> bitElementType) {
+__device__ __device__ MatrixXd NaturalDerivatives(double xi, double eta, char bitElementType) {
+	array<double, 8> Ni_xi = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	array<double, 8> Ni_eta = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	Ni_xi[4]  = - xi * (1 - eta);
+	Ni_eta[4] = -(1 - xi*xi) / 2;
+	Ni_xi[5]  =  (1 - eta*eta) / 2;
+	Ni_eta[5] = - eta * (1 + xi);
+	Ni_xi[6]  = - xi * (1 + eta);
+	Ni_eta[6] =  (1 - xi*xi) / 2;
+	Ni_xi[7]  = -(1 - eta*eta) / 2;
+	Ni_eta[7] = - eta * (1 - xi);
+	int numberOfNodes = 0;
+	for (int i=0; i<8; ++i){
+		if (bitElementType & (1 << i)) ++numberOfNodes;
+		else (Ni_xi[i]=Ni_eta[i]=0);
+	}
+	Ni_xi[0]  = -(1 - eta) / 4 - (Ni_xi[7]  + Ni_xi[4])  / 2;
+	Ni_eta[0] = -(1 - xi)  / 4 - (Ni_eta[7] + Ni_eta[4]) / 2;
+	Ni_xi[1]  =  (1 - eta) / 4 - (Ni_xi[4]  + Ni_xi[5])  / 2;
+	Ni_eta[1] = -(1 + xi)  / 4 - (Ni_eta[4] + Ni_eta[5]) / 2;
+	Ni_xi[2]  =  (1 + eta) / 4 - (Ni_xi[5]  + Ni_xi[6])  / 2;
+	Ni_eta[2] =  (1 + xi)  / 4 - (Ni_eta[5] + Ni_eta[6]) / 2;
+	Ni_xi[3]  = -(1 + eta) / 4 - (Ni_xi[6]  + Ni_xi[7])  / 2;
+	Ni_eta[3] =  (1 - xi)  / 4 - (Ni_eta[6] + Ni_eta[7]) / 2;
+	MatrixXd naturalDerivatives(2,numberOfNodes);
+	for (int i=0; i<numberOfNodes; ++i) if(Ni_xi[i]!=0) naturalDerivatives<<Ni_xi[i];
+	for (int i=0; i<numberOfNodes; ++i) if(Ni_eta[i]!=0) naturalDerivatives<<Ni_eta[i];
+	return naturalDerivatives;
+}
+
+RowVectorXd ShapeFunction(double xi, double eta, bitset<8> bitElementType) {
 	RowVectorXd shape(bitElementType.count()); // 1 x n
 	array<double, 8> Ni = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	size_t cnt = bitElementType.count() - 1; 
@@ -50,8 +99,7 @@ __device__ __host__ RowVectorXd ShapeFunction(double xi, double eta, bitset<8> b
 	return shape;
 }
 
-
-__device__ __host__ MatrixXd NaturalDerivatives(double xi, double eta, bitset<8> bitElementType) {
+MatrixXd NaturalDerivatives(double xi, double eta, bitset<8> bitElementType) {
 	MatrixXd naturalDerivatives(2, bitElementType.count()); // 2 x n
 	array<double, 8> Ni_xi = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	array<double, 8> Ni_eta = { 0, 0, 0, 0, 0, 0, 0, 0 };

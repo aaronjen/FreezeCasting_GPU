@@ -3,9 +3,13 @@
 #include <Eigen/Dense>
 #include <bitset>
 
-__device__ __host__ Eigen::RowVectorXd ShapeFunction(double xi, double eta, std::bitset<8> bitElementType);
+Eigen::RowVectorXd ShapeFunction(double xi, double eta, std::bitset<8> bitElementType);
 
-__device__ __host__ Eigen::MatrixXd NaturalDerivatives(double xi, double eta, std::bitset<8> bitElementType);
+Eigen::MatrixXd NaturalDerivatives(double xi, double eta, std::bitset<8> bitElementType);
+
+__device__ __host__ Eigen::RowVectorXd ShapeFunction(double xi, double eta, char bitElementType);
+
+__device__ __host__ Eigen::MatrixXd NaturalDerivatives(double xi, double eta, char bitElementType);
 
 __device__ __host__ Eigen::Matrix2d Jacobian(const Eigen::MatrixXd& nodeCoord, const Eigen::MatrixXd& naturalDerivatives);
 
