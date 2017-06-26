@@ -82,6 +82,15 @@ private:
 	double* aCoordX = 0;
 	double* aCoordY = 0;
 
+
+	double* adM11 = 0;
+	double* adM21 = 0;
+	double* adM22 = 0;
+	double* adK11 = 0;
+	double* adK21 = 0;
+	double* adK22 = 0;
+	double* adF1 = 0;
+
 	double* aM11 = 0;
 	double* aM21 = 0;
 	double* aM22 = 0;
