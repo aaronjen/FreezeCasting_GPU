@@ -11,7 +11,6 @@ all: $(COBJS)
 FEM.o: FEM.cu FEM.h
 	$(CXX) $(CXXFLAGS) FEM.cu -c
 
-
 run:
 	./main
 

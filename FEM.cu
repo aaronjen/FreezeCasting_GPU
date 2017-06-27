@@ -227,21 +227,13 @@ __global__ void cu_element(
 ){
 	int e = blockIdx.x * blockDim.x + threadIdx.x;
 	if (e < elemSize){
-		Map<MatrixXd> mM11(aM11, ncSize, ncSize);
-		Map<MatrixXd> mM21(aM21, ncSize, ncSize);
-		Map<MatrixXd> mM22(aM22, ncSize, ncSize);
-		Map<MatrixXd> mK11(aK11, ncSize, ncSize);
-		Map<MatrixXd> mK21(aK21, ncSize, ncSize);
-		Map<MatrixXd> mK22(aK22, ncSize, ncSize);
-		Map<VectorXd> vF1(aF1, ncSize);
-
-		mM11 = MatrixXd::Zero(ncSize, ncSize);
-		mM21 = MatrixXd::Zero(ncSize, ncSize);
-		mM22 = MatrixXd::Zero(ncSize, ncSize);
-		mK11 = MatrixXd::Zero(ncSize, ncSize);
-		mK21 = MatrixXd::Zero(ncSize, ncSize);
-		mK22 = MatrixXd::Zero(ncSize, ncSize);
-		vF1  = VectorXd::Zero(ncSize);
+		// Map<MatrixXd> mM11(aM11, ncSize, ncSize);
+		// Map<MatrixXd> mM21(aM21, ncSize, ncSize);
+		// Map<MatrixXd> mM22(aM22, ncSize, ncSize);
+		// Map<MatrixXd> mK11(aK11, ncSize, ncSize);
+		// Map<MatrixXd> mK21(aK21, ncSize, ncSize);
+		// Map<MatrixXd> mK22(aK22, ncSize, ncSize);
+		// Map<VectorXd> vF1(aF1, ncSize);
 
 		const double PI = 3.14159265358979323846;
 		double C_inf = 3;	// (wt%)
@@ -369,20 +361,21 @@ void FEM::cu_find_matrixs(double lambda, double epsilon, unsigned tloop, double 
 	cudaMemcpy(aPHI, PHI.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(aU, U.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
 
-	cudaMemcpy(adM11, aM11, sizeof(double)*ncSize*ncSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(adM21, aM21, sizeof(double)*ncSize*ncSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(adM22, aM22, sizeof(double)*ncSize*ncSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(adK11, aK11, sizeof(double)*ncSize*ncSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(adK21, aK21, sizeof(double)*ncSize*ncSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(adK22, aK22, sizeof(double)*ncSize*ncSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(adF1,  aF1, sizeof(double)*ncSize,         cudaMemcpyHostToDevice);
-
 	for(int i = 0; i < ncSize ; ++i){
 		if(PHI[i] != PHI[i]){
 			cout << tloop << endl;
 			exit(1);
 		}
 	}
+
+	cudaMemset(adM11, 0, sizeof(double)*ncSize*ncSize);
+	cudaMemset(adM21, 0, sizeof(double)*ncSize*ncSize);
+	cudaMemset(adM22, 0, sizeof(double)*ncSize*ncSize);
+	cudaMemset(adK11, 0, sizeof(double)*ncSize*ncSize);
+	cudaMemset(adK21, 0, sizeof(double)*ncSize*ncSize);
+	cudaMemset(adK22, 0, sizeof(double)*ncSize*ncSize);
+	cudaMemset(adF1, 0, sizeof(double)*ncSize);
+
 
 	cudaDeviceSynchronize();
 
@@ -591,9 +584,13 @@ void FEM::time_discretization(
 	
 	t = clock(); //-> matrix
 
+	
 	cu_find_matrixs(lambda, epsilon, tloop, dt);
-
+	
 	// find_matrixs(lambda, epsilon, tloop, dt);
+	
+
+	
 	SparseMatrix<double> mM11 = Map<MatrixXd>(aM11, ncSize, ncSize).sparseView();
 	SparseMatrix<double> mM21 = Map<MatrixXd>(aM21, ncSize, ncSize).sparseView();
 	SparseMatrix<double> mM22 = Map<MatrixXd>(aM22, ncSize, ncSize).sparseView();
