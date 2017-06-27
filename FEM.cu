@@ -192,12 +192,26 @@ __device__ __host__ MatrixXd cuNaturalDerivatives(double xi, double eta, unsigne
 	return naturalDerivatives;
 }
 
+__device__ double determinant(const Matrix2d& target){
+	return target(0,0)*target(1,1)-target(0,1)*target(1,0);
+}
+
+
+__device__ Matrix2d inverse(const Matrix2d& target){
+	double det=determinant(target);
+	Matrix2d inv;
+	inv(0,0)=target(1,1)/det;
+	inv(1,1)=target(0,0)/det;
+	inv(0,1)=-target(0,1)/det;
+	inv(1,0)=-target(1,0)/det;	
+}
+
 __device__ __host__ Matrix2d cuJacobian(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
     return naturalDerivatives * nodeCoord;
 }
 
 __device__ __host__ Matrix2d cuinvJacobian(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
-    return cuJacobian(nodeCoord,naturalDerivatives).inverse();
+    return inverse(cuJacobian(nodeCoord,naturalDerivatives));
 }
 
 __device__ __host__ MatrixXd cuXYDerivatives(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
@@ -205,7 +219,7 @@ __device__ __host__ MatrixXd cuXYDerivatives(const MatrixXd& nodeCoord, const Ma
 }
 
 __device__ __host__ double cudetJacobian(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
-    return cuJacobian(nodeCoord,naturalDerivatives).determinant();
+    return determinant(cuJacobian(nodeCoord,naturalDerivatives));
 }
 
 __global__ void cu_element(
