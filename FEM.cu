@@ -117,21 +117,21 @@ void FEM::MeshRefinement() {
 	cudaMallocManaged((void **)&adF1,  sizeof(float)*ncSize);
 
 	// host pointer
-	free(aM11);
-	free(aM21);
-	free(aM22);
-	free(aK11);
-	free(aK21);
-	free(aK22);
-	free(aF1);
+	// free(aM11);
+	// free(aM21);
+	// free(aM22);
+	// free(aK11);
+	// free(aK21);
+	// free(aK22);
+	// free(aF1);
 
-	aM11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aM21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aM22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aK11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aK21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aK22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
-	aF1 = (double*)malloc(sizeof(double)*ncSize);
+	// aM11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aM21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aM22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aK11 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aK21 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aK22 = (double*)malloc(sizeof(double)*ncSize*ncSize);
+	// aF1 = (double*)malloc(sizeof(double)*ncSize);
 }
 
 __device__ __host__ RowVectorXf cuShapeFunction(float xi, float eta, unsigned char bitElementType) {
@@ -223,7 +223,7 @@ __device__ float cudetJacobian(const MatrixXf& nodeCoord, const MatrixXf& natura
     return determinant(cuJacobian(nodeCoord,naturalDerivatives));
 }
 
-__device__ __host__ MatrixXf get_cotangent(const VectorXf& phi, const MatrixXf& B) {
+__device__ __host__ MatrixXf cu_get_cotangent(const VectorXf& phi, const MatrixXf& B) {
 ////////////////////////////////////////////////////////////////////////
 // phi = / phi1 \     B =  / N1,x N2,x N3,x N4,x \     cot = / DERX \ //
 //       | phi2 |          \ N1,y N2,y N3,y N4,y /           \ DERY / //
@@ -234,7 +234,7 @@ __device__ __host__ MatrixXf get_cotangent(const VectorXf& phi, const MatrixXf& 
 }
 
 // g'(phi) - lambda*U*P'(phi)
-__device__ __host__ float f(float phi, float u, float theta, float lambda) {
+__device__ __host__ float cuF(float phi, float u, float theta, float lambda) {
 	return phi * (1 - phi*phi) - lambda * u * pow(1 - phi*phi, 2.0);
 	//return phi * (1 - phi*phi) - lambda * pow(1 - phi*phi, 2.0) * (u + 0.9 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
 	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta);
@@ -318,7 +318,7 @@ __global__ void cu_element(
 	RowVectorXf N0 = cuShapeFunction(0, 0, bitElementType);
 	MatrixXf dN0 = cuNaturalDerivatives(0, 0, bitElementType); // 2 x n
 	MatrixXf B0 = cuXYDerivatives(elementNodesCoord, dN0); // 2 x n
-	MatrixXf cotangent = get_cotangent(phi, B0); // 2 x 1
+	MatrixXf cotangent = cu_get_cotangent(phi, B0); // 2 x 1
 	float DERX = cotangent(0);
 	float DERY = cotangent(1);
 	float angle = atan2(DERY, DERX);
@@ -353,7 +353,7 @@ __global__ void cu_element(
 			Nphi += N(i) * phi(i);
 			Nu += N(i) * u(i);
 		}
-		Fe += N.transpose() * f(Nphi, Nu, theta, lambda) * W * J; // n x 1
+		Fe += N.transpose() * cuF(Nphi, Nu, theta, lambda) * W * J; // n x 1
 	}
 	
 	for (unsigned i=0; i<numNodePerElement; i++) {
@@ -366,7 +366,9 @@ __global__ void cu_element(
 				atomicAdd(&aM21[idx], -0.5*Ce(i, j));
 				atomicAdd(&aM11[idx], as * as * Ce(i, j));
 			}
-			if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
+			if((Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) && (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12))
+				atomicAdd(&aK11[idx], -as * as * Ae(i, j) -as * asp * Ee(i, j));
+			else if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
 				float N0phi = 0;
 				for(int i = 0; i < N0.size(); ++i){
 					N0phi += N0(i) * phi(i);
@@ -374,8 +376,11 @@ __global__ void cu_element(
 				atomicAdd(&aK22[idx], -D * cuQ(N0phi, 0.7) * Ae(i, j));
 				atomicAdd(&aK11[idx], -as * as * Ae(i, j));
 			}
-			if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
+			else if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
 				atomicAdd(&aK11[idx], -as * asp * Ee(i, j));
+
+			
+
 		}
 		if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
 			atomicAdd(&aF1[x], Fe(i));
@@ -399,18 +404,18 @@ void FEM::cu_find_matrixs(float lambda, float epsilon, unsigned tloop, float dt)
 	cu_element<<<CeilDiv(elemSize, 256), 256>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY, adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize, elemSize);
 
 	cudaDeviceSynchronize();
-	for(int i = 0; i < ncSize*ncSize; ++i){
-		aM11[i] = adM11[i];
-		aM21[i] = adM21[i];
-		aM22[i] = adM22[i];
-		aK11[i] = adK11[i];
-		aK21[i] = adK21[i];
-		aK22[i] = adK22[i];
-	}
+	// for(int i = 0; i < ncSize*ncSize; ++i){
+	// 	aM11[i] = adM11[i];
+	// 	aM21[i] = adM21[i];
+	// 	aM22[i] = adM22[i];
+	// 	aK11[i] = adK11[i];
+	// 	aK21[i] = adK21[i];
+	// 	aK22[i] = adK22[i];
+	// }
 
-	for(int i = 0; i < ncSize; ++i){
-		aF1[i] = adF1[i];
-	}
+	// for(int i = 0; i < ncSize; ++i){
+	// 	aF1[i] = adF1[i];
+	// }
 }
 
 void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt) {
@@ -578,15 +583,16 @@ void FEM::time_discretization(
 	VectorXd v1;
 	if (tloop == 0) {
 		PHIvelocity *= 0;
-		find_matrixs(lambda, epsilon, tloop, dt);
+		cu_find_matrixs(lambda, epsilon, tloop, dt);
 
-		SparseMatrix<double> mM11 = Map<MatrixXd>(aM11, ncSize, ncSize).sparseView();
-		SparseMatrix<double> mM21 = Map<MatrixXd>(aM21, ncSize, ncSize).sparseView();
-		SparseMatrix<double> mM22 = Map<MatrixXd>(aM22, ncSize, ncSize).sparseView();
-		SparseMatrix<double> mK11 = Map<MatrixXd>(aK11, ncSize, ncSize).sparseView();
-		SparseMatrix<double> mK21 = Map<MatrixXd>(aK21, ncSize, ncSize).sparseView();
-		SparseMatrix<double> mK22 = Map<MatrixXd>(aK22, ncSize, ncSize).sparseView();
-		Map<VectorXd> vF1(aF1, ncSize);
+		SparseMatrix<double> mM11 = Map<MatrixXf>(adM11, ncSize, ncSize).cast<double>().sparseView();
+		SparseMatrix<double> mM21 = Map<MatrixXf>(adM21, ncSize, ncSize).cast<double>().sparseView();
+		SparseMatrix<double> mM22 = Map<MatrixXf>(adM22, ncSize, ncSize).cast<double>().sparseView();
+		SparseMatrix<double> mK11 = Map<MatrixXf>(adK11, ncSize, ncSize).cast<double>().sparseView();
+		SparseMatrix<double> mK21 = Map<MatrixXf>(adK21, ncSize, ncSize).cast<double>().sparseView();
+		SparseMatrix<double> mK22 = Map<MatrixXf>(adK22, ncSize, ncSize).cast<double>().sparseView();
+		VectorXd vF1 = Map<VectorXf>(adF1, ncSize).cast<double>();
+
 
 		SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
 		SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
@@ -610,13 +616,13 @@ void FEM::time_discretization(
 	
 
 	
-	SparseMatrix<double> mM11 = Map<MatrixXd>(aM11, ncSize, ncSize).sparseView();
-	SparseMatrix<double> mM21 = Map<MatrixXd>(aM21, ncSize, ncSize).sparseView();
-	SparseMatrix<double> mM22 = Map<MatrixXd>(aM22, ncSize, ncSize).sparseView();
-	SparseMatrix<double> mK11 = Map<MatrixXd>(aK11, ncSize, ncSize).sparseView();
-	SparseMatrix<double> mK21 = Map<MatrixXd>(aK21, ncSize, ncSize).sparseView();
-	SparseMatrix<double> mK22 = Map<MatrixXd>(aK22, ncSize, ncSize).sparseView();
-	Map<VectorXd> vF1(aF1, ncSize);
+	SparseMatrix<double> mM11 = Map<MatrixXf>(adM11, ncSize, ncSize).cast<double>().sparseView();
+	SparseMatrix<double> mM21 = Map<MatrixXf>(adM21, ncSize, ncSize).cast<double>().sparseView();
+	SparseMatrix<double> mM22 = Map<MatrixXf>(adM22, ncSize, ncSize).cast<double>().sparseView();
+	SparseMatrix<double> mK11 = Map<MatrixXf>(adK11, ncSize, ncSize).cast<double>().sparseView();
+	SparseMatrix<double> mK21 = Map<MatrixXf>(adK21, ncSize, ncSize).cast<double>().sparseView();
+	SparseMatrix<double> mK22 = Map<MatrixXf>(adK22, ncSize, ncSize).cast<double>().sparseView();
+	VectorXd vF1 = Map<VectorXf>(adF1, ncSize).cast<double>();
 
 	matrix_time += clock() - t;	 //<- matrix
 
@@ -649,4 +655,29 @@ void FEM::time_discretization(
 	//cout << "\tsolver: " << 1.*solver_time/CLOCKS_PER_SEC << " sec" << endl;
 	//cout << "\tscheme: " << 1.*scheme_time/CLOCKS_PER_SEC << " sec" << endl;
 	
+}
+
+__device__ __host__ MatrixXd get_cotangent(const VectorXd& phi, const MatrixXd& B) {
+////////////////////////////////////////////////////////////////////////
+// phi = / phi1 \     B =  / N1,x N2,x N3,x N4,x \     cot = / DERX \ //
+//       | phi2 |          \ N1,y N2,y N3,y N4,y /           \ DERY / //
+//       | phi3 |                                                     //
+//       \ phi4 /                                                     //
+////////////////////////////////////////////////////////////////////////
+    return B * phi; // 2x1
+}
+
+// g'(phi) - lambda*U*P'(phi)
+__device__ __host__ double f(double phi, double u, double theta, double lambda) {
+	return phi * (1 - phi*phi) - lambda * u * pow(1 - phi*phi, 2.0);
+	//return phi * (1 - phi*phi) - lambda * pow(1 - phi*phi, 2.0) * (u + 0.9 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
+	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta);
+	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta + 0.3 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
+}
+
+__device__ __host__ double q(double phi, double k) {
+	//return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi);
+	return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi) + (1 + phi) * 0.2 / 2;
+	//return (phi >= 1) ? 0 : (1 - phi) / 2;
+	//return (phi >= 1) ? 0 : (1 - phi) / 2 + (1 + phi) * 0.2 / 2;
 }
