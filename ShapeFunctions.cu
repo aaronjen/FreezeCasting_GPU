@@ -24,7 +24,7 @@ __device__ __host__ RowVectorXd ShapeFunction(double xi, double eta, unsigned ch
 	RowVectorXd shape(numberOfNodes); // 1 x n
 	int cnt=0;
 	for (int i=0; i<8; ++i)
-		if(Ni[i]!=0) shape(cnt++)=Ni[i];
+		if(bitElementType & (1 << i)) shape(cnt++)=Ni[i];
 	return shape;
 }
 
@@ -54,9 +54,9 @@ __device__ __host__ MatrixXd NaturalDerivatives(double xi, double eta, unsigned 
 	Ni_eta[3] =  (1 - xi)  / 4 - (Ni_eta[6] + Ni_eta[7]) / 2;
 	MatrixXd naturalDerivatives(2,numberOfNodes);
 	int cnt=0;
-	for (int i=0; i<8; ++i) if(Ni_xi[i]!=0) naturalDerivatives(0,cnt++) = Ni_xi[i];
+	for (int i=0; i<8; ++i) if(bitElementType & (1 << i)) naturalDerivatives(0,cnt++) = Ni_xi[i];
 	cnt=0;
-	for (int i=0; i<8; ++i) if(Ni_eta[i]!=0) naturalDerivatives(1,cnt++) = Ni_eta[i];
+	for (int i=0; i<8; ++i) if(bitElementType & (1 << i)) naturalDerivatives(1,cnt++) = Ni_eta[i];
 	return naturalDerivatives;
 }
 
