@@ -134,8 +134,8 @@ void FEM::MeshRefinement() {
 	aF1 = (double*)malloc(sizeof(double)*ncSize);
 }
 
-__device__ __host__ RowVectorXd cuShapeFunction(double xi, double eta, unsigned char bitElementType) {
-	double Ni[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+__device__ __host__ RowVectorXf cuShapeFunction(float xi, float eta, unsigned char bitElementType) {
+	float Ni[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	Ni[7] = (1 - eta*eta) * (1 - xi) / 2; // N8
 	Ni[6] = (1 - xi*xi) * (1 + eta) / 2;  // N7
 	Ni[5] = (1 - eta*eta) * (1 + xi) / 2; // N6
@@ -149,16 +149,16 @@ __device__ __host__ RowVectorXd cuShapeFunction(double xi, double eta, unsigned 
 	Ni[2] = (1 + xi) * (1 + eta) / 4 - (Ni[5] + Ni[6]) / 2; // N3 - (N6 + N7) / 2
 	Ni[1] = (1 + xi) * (1 - eta) / 4 - (Ni[4] + Ni[5]) / 2; // N2 - (N5 + N6) / 2
 	Ni[0] = (1 - xi) * (1 - eta) / 4 - (Ni[7] + Ni[4]) / 2; // N1 - (N8 + N5) / 2
-	RowVectorXd shape(numberOfNodes); // 1 x n
+	RowVectorXf shape(numberOfNodes); // 1 x n
 	int cnt=0;
 	for (int i=0; i<8; ++i)
 		if(bitElementType & (1 << i)) shape(cnt++)=Ni[i];
 	return shape;
 }
 
-__device__ __host__ MatrixXd cuNaturalDerivatives(double xi, double eta, unsigned char bitElementType) {
-	double Ni_xi[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	double Ni_eta[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+__device__ __host__ MatrixXf cuNaturalDerivatives(float xi, float eta, unsigned char bitElementType) {
+	float Ni_xi[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Ni_eta[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	Ni_xi[4]  = - xi * (1 - eta);
 	Ni_eta[4] = -(1 - xi*xi) / 2;
 	Ni_xi[5]  =  (1 - eta*eta) / 2;
@@ -180,7 +180,7 @@ __device__ __host__ MatrixXd cuNaturalDerivatives(double xi, double eta, unsigne
 	Ni_eta[2] =  (1 + xi)  / 4 - (Ni_eta[5] + Ni_eta[6]) / 2;
 	Ni_xi[3]  = -(1 + eta) / 4 - (Ni_xi[6]  + Ni_xi[7])  / 2;
 	Ni_eta[3] =  (1 - xi)  / 4 - (Ni_eta[6] + Ni_eta[7]) / 2;
-	MatrixXd naturalDerivatives(2,numberOfNodes);
+	MatrixXf naturalDerivatives(2,numberOfNodes);
 	int cnt=0;
 	for (int i=0; i<8; ++i) {
 		if(bitElementType & (1 << i)) {
@@ -192,14 +192,14 @@ __device__ __host__ MatrixXd cuNaturalDerivatives(double xi, double eta, unsigne
 	return naturalDerivatives;
 }
 
-__device__ double determinant(const Matrix2d& target){
+__device__ float determinant(const Matrix2f& target){
 	return target(0,0)*target(1,1)-target(0,1)*target(1,0);
 }
 
 
-__device__ Matrix2d inverse(const Matrix2d& target){
-	double det=determinant(target);
-	Matrix2d inv;
+__device__ Matrix2f inverse(const Matrix2f& target){
+	float det=determinant(target);
+	Matrix2f inv;
 	inv(0,0)=target(1,1)/det;
 	inv(1,1)=target(0,0)/det;
 	inv(0,1)=-target(0,1)/det;
@@ -207,26 +207,51 @@ __device__ Matrix2d inverse(const Matrix2d& target){
 	return inv;
 }
 
-__device__ Matrix2d cuJacobian(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
+__device__ Matrix2f cuJacobian(const MatrixXf& nodeCoord, const MatrixXf& naturalDerivatives) {
     return naturalDerivatives * nodeCoord;
 }
 
-__device__ Matrix2d cuinvJacobian(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
+__device__ Matrix2f cuinvJacobian(const MatrixXf& nodeCoord, const MatrixXf& naturalDerivatives) {
     return inverse(cuJacobian(nodeCoord,naturalDerivatives));
 }
 
-__device__ MatrixXd cuXYDerivatives(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
+__device__ MatrixXf cuXYDerivatives(const MatrixXf& nodeCoord, const MatrixXf& naturalDerivatives) {
     return cuinvJacobian(nodeCoord,naturalDerivatives) * naturalDerivatives;
 }
 
-__device__ double cudetJacobian(const MatrixXd& nodeCoord, const MatrixXd& naturalDerivatives) {
+__device__ float cudetJacobian(const MatrixXf& nodeCoord, const MatrixXf& naturalDerivatives) {
     return determinant(cuJacobian(nodeCoord,naturalDerivatives));
 }
 
+__device__ __host__ MatrixXf get_cotangent(const VectorXf& phi, const MatrixXf& B) {
+////////////////////////////////////////////////////////////////////////
+// phi = / phi1 \     B =  / N1,x N2,x N3,x N4,x \     cot = / DERX \ //
+//       | phi2 |          \ N1,y N2,y N3,y N4,y /           \ DERY / //
+//       | phi3 |                                                     //
+//       \ phi4 /                                                     //
+////////////////////////////////////////////////////////////////////////
+    return B * phi; // 2x1
+}
+
+// g'(phi) - lambda*U*P'(phi)
+__device__ __host__ float f(float phi, float u, float theta, float lambda) {
+	return phi * (1 - phi*phi) - lambda * u * pow(1 - phi*phi, 2.0);
+	//return phi * (1 - phi*phi) - lambda * pow(1 - phi*phi, 2.0) * (u + 0.9 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
+	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta);
+	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta + 0.3 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
+}
+
+__device__ __host__ float cuQ(float phi, float k) {
+	//return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi);
+	return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi) + (1 + phi) * 0.2 / 2;
+	//return (phi >= 1) ? 0 : (1 - phi) / 2;
+	//return (phi >= 1) ? 0 : (1 - phi) / 2 + (1 + phi) * 0.2 / 2;
+}
+
 __global__ void cu_element(
-	double lambda,
-	double tloop,
-	double epsilon,
+	float lambda,
+	float tloop,
+	float epsilon,
 	const double* aPHI,
 	const double* aU,
 	const int* aEFT,
@@ -248,34 +273,34 @@ __global__ void cu_element(
 	
 	if (e >= elemSize) return;
 
-	const double PI = 3.14159265358979323846;
-	double C_inf = 3;	// (wt%)
-	double k = 0.14;		// 
-	double G = 140 * 40;		// (K/cm)
-	double d0 = 5E-3;		// (1E-6m)
-	double alpha = 3000;	// (1E-6m2/s)
-	double Vp = 3000;		// (1E-6m/s)
-	double Ts = 273;		// (K)
-	double dT0 = 2.6 * C_inf * (1 - k) / k;		// (K)
-	double T0 = Ts - dT0 / 10;		// (K)
-	double a1 = 0.8839;
-	double a2 = 0.6267;
-	double W0 = d0 * lambda / a1; // (1E-6m)
-	double Tau0 = a2 * lambda * W0 * W0 / alpha; // (s)
-	double D = lambda * a2;
+	const float PI = 3.14159265358979323846;
+	float C_inf = 3;	// (wt%)
+	float k = 0.14;		// 
+	float G = 140 * 40;		// (K/cm)
+	float d0 = 5E-3;		// (1E-6m)
+	float alpha = 3000;	// (1E-6m2/s)
+	float Vp = 3000;		// (1E-6m/s)
+	float Ts = 273;		// (K)
+	float dT0 = 2.6 * C_inf * (1 - k) / k;		// (K)
+	float T0 = Ts - dT0 / 10;		// (K)
+	float a1 = 0.8839;
+	float a2 = 0.6267;
+	float W0 = d0 * lambda / a1; // (1E-6m)
+	float Tau0 = a2 * lambda * W0 * W0 / alpha; // (s)
+	float D = lambda * a2;
 
 	// Gaussian point
-	const double xis[4] = {-0.577350269189626, 0.577350269189626, 0.577350269189626, -0.577350269189626};
-	const double etas[4] = {-0.577350269189626, -0.577350269189626, 0.577350269189626, 0.577350269189626};
+	const float xis[4] = {-0.577350269189626, 0.577350269189626, 0.577350269189626, -0.577350269189626};
+	const float etas[4] = {-0.577350269189626, -0.577350269189626, 0.577350269189626, 0.577350269189626};
 
 	int m = 6;
-    double RealTime = Tau0 * tloop; // (s)
+    float RealTime = Tau0 * tloop; // (s)
 
     int numNodePerElement = aNodeNum[e];
     unsigned char bitElementType = elementType[e];
-    MatrixXd elementNodesCoord(numNodePerElement,2);
-    VectorXd phi(numNodePerElement);
-    VectorXd u(numNodePerElement);
+    MatrixXf elementNodesCoord(numNodePerElement,2);
+    VectorXf phi(numNodePerElement);
+    VectorXf u(numNodePerElement);
 
     for (unsigned i = 0; i < numNodePerElement; i++) {
     	int nodeSerial = aEFT[e*8 + i];
@@ -285,36 +310,36 @@ __global__ void cu_element(
     	u(i) = aU[nodeSerial];
     }
 
-    MatrixXd Ce = MatrixXd::Zero(numNodePerElement, numNodePerElement);
-    MatrixXd Ae = MatrixXd::Zero(numNodePerElement, numNodePerElement);
-    MatrixXd Ee = MatrixXd::Zero(numNodePerElement, numNodePerElement);
-	VectorXd Fe = VectorXd::Zero(numNodePerElement); // n x 1
+    MatrixXf Ce = MatrixXf::Zero(numNodePerElement, numNodePerElement);
+    MatrixXf Ae = MatrixXf::Zero(numNodePerElement, numNodePerElement);
+    MatrixXf Ee = MatrixXf::Zero(numNodePerElement, numNodePerElement);
+	VectorXf Fe = VectorXf::Zero(numNodePerElement); // n x 1
 
-	RowVectorXd N0 = cuShapeFunction(0, 0, bitElementType);
-	MatrixXd dN0 = cuNaturalDerivatives(0, 0, bitElementType); // 2 x n
-	MatrixXd B0 = cuXYDerivatives(elementNodesCoord, dN0); // 2 x n
-	MatrixXd cotangent = get_cotangent(phi, B0); // 2 x 1
-	double DERX = cotangent(0);
-	double DERY = cotangent(1);
-	double angle = atan2(DERY, DERX);
-	double as = 1 + epsilon * cos(m*(angle - PI / 6)); // A(theta)
-	double asp = -m * epsilon * sin(m*(angle - PI / 6)); // A'(theta)
-	double col1 = 0;
+	RowVectorXf N0 = cuShapeFunction(0, 0, bitElementType);
+	MatrixXf dN0 = cuNaturalDerivatives(0, 0, bitElementType); // 2 x n
+	MatrixXf B0 = cuXYDerivatives(elementNodesCoord, dN0); // 2 x n
+	MatrixXf cotangent = get_cotangent(phi, B0); // 2 x 1
+	float DERX = cotangent(0);
+	float DERY = cotangent(1);
+	float angle = atan2(DERY, DERX);
+	float as = 1 + epsilon * cos(m*(angle - PI / 6)); // A(theta)
+	float asp = -m * epsilon * sin(m*(angle - PI / 6)); // A'(theta)
+	float col1 = 0;
 	for(int i = 0; i < N0.size(); ++i){
 		col1 += N0(i) * elementNodesCoord(i, 1);
 	}
-	double Temperature = T0 + G * 1E2 * (W0 * col1 - Vp*RealTime) * 1E-6; // (K)
-	double theta = (Temperature - Ts) / dT0;
+	float Temperature = T0 + G * 1E2 * (W0 * col1 - Vp*RealTime) * 1E-6; // (K)
+	float theta = (Temperature - Ts) / dT0;
 
 	int nGp = 4;
 	for (int q=0; q<nGp; q++) {
-		double xi = xis[q];
-		double eta = etas[q];
-		double W = 1;
-		RowVectorXd N = cuShapeFunction(xi, eta, bitElementType); // 1 x n
-		MatrixXd dN = cuNaturalDerivatives(xi, eta, bitElementType); // 2 x n
-		MatrixXd B = cuXYDerivatives(elementNodesCoord, dN); // 2 x n
-		double J = cudetJacobian(elementNodesCoord, dN); // 1 x 1
+		float xi = xis[q];
+		float eta = etas[q];
+		float W = 1;
+		RowVectorXf N = cuShapeFunction(xi, eta, bitElementType); // 1 x n
+		MatrixXf dN = cuNaturalDerivatives(xi, eta, bitElementType); // 2 x n
+		MatrixXf B = cuXYDerivatives(elementNodesCoord, dN); // 2 x n
+		float J = cudetJacobian(elementNodesCoord, dN); // 1 x 1
 
 
                 // matrixs of a element
@@ -322,8 +347,8 @@ __global__ void cu_element(
 		Ae -= B.transpose() * B * W * J; // n x n
 		Ee -= (B.row(1).transpose()*B.row(0) - B.row(0).transpose()*B.row(1)) * W * J; // n x n
 
-		double Nphi = 0;
-		double Nu = 0;
+		float Nphi = 0;
+		float Nu = 0;
 		for(int i = 0; i < N.size(); ++i){
 			Nphi += N(i) * phi(i);
 			Nu += N(i) * u(i);
@@ -340,37 +365,25 @@ __global__ void cu_element(
 				atomicAdd(&aM22[idx], Ce(i, j));
 				atomicAdd(&aM21[idx], -0.5*Ce(i, j));
 				atomicAdd(&aM11[idx], as * as * Ce(i, j));
-
-
-				// aM22[idx] += Ce(i, j);
-				// aM21[idx] += -0.5*Ce(i, j);
-				// aM11[idx] += as * as * Ce(i, j);
 			}
 			if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
-				double N0phi = 0;
+				float N0phi = 0;
 				for(int i = 0; i < N0.size(); ++i){
 					N0phi += N0(i) * phi(i);
 				}
-				atomicAdd(&aK22[idx], -D * q(N0phi, 0.7) * Ae(i, j));
+				atomicAdd(&aK22[idx], -D * cuQ(N0phi, 0.7) * Ae(i, j));
 				atomicAdd(&aK11[idx], -as * as * Ae(i, j));
-
-				// aK22[idx] += -D * q(N0phi, 0.7) * Ae(i, j);
-				// aK11[idx] += -as * as * Ae(i, j);
 			}
 			if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
 				atomicAdd(&aK11[idx], -as * asp * Ee(i, j));
-
-				// aK11[idx] += -as * asp * Ee(i, j);
 		}
 		if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
 			atomicAdd(&aF1[x], Fe(i));
-
-			// aF1[x] += Fe(i);
 	}
 }
 
 
-void FEM::cu_find_matrixs(double lambda, double epsilon, unsigned tloop, double dt){
+void FEM::cu_find_matrixs(float lambda, float epsilon, unsigned tloop, float dt){
 
 	cudaMemcpy(aPHI, PHI.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(aU, U.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
@@ -383,7 +396,7 @@ void FEM::cu_find_matrixs(double lambda, double epsilon, unsigned tloop, double 
 	cudaMemset(adK22, 0, sizeof(float)*ncSize*ncSize);
 	cudaMemset(adF1,  0, sizeof(float)*ncSize);
 
-	cu_element<<<256, 256>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY, adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize, elemSize);
+	cu_element<<<CeilDiv(elemSize, 256), 256>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY, adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize, elemSize);
 
 	cudaDeviceSynchronize();
 	for(int i = 0; i < ncSize*ncSize; ++i){
@@ -636,29 +649,4 @@ void FEM::time_discretization(
 	//cout << "\tsolver: " << 1.*solver_time/CLOCKS_PER_SEC << " sec" << endl;
 	//cout << "\tscheme: " << 1.*scheme_time/CLOCKS_PER_SEC << " sec" << endl;
 	
-}
-
-__device__ __host__ MatrixXd get_cotangent(const VectorXd& phi, const MatrixXd& B) {
-////////////////////////////////////////////////////////////////////////
-// phi = / phi1 \     B =  / N1,x N2,x N3,x N4,x \     cot = / DERX \ //
-//       | phi2 |          \ N1,y N2,y N3,y N4,y /           \ DERY / //
-//       | phi3 |                                                     //
-//       \ phi4 /                                                     //
-////////////////////////////////////////////////////////////////////////
-    return B * phi; // 2x1
-}
-
-// g'(phi) - lambda*U*P'(phi)
-__device__ __host__ double f(double phi, double u, double theta, double lambda) {
-	return phi * (1 - phi*phi) - lambda * u * pow(1 - phi*phi, 2.0);
-	//return phi * (1 - phi*phi) - lambda * pow(1 - phi*phi, 2.0) * (u + 0.9 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
-	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta);
-	//return phi * (1 - phi*phi) - lambda * pow((1 - phi*phi), 2.0) * (u + theta + 0.3 * phi * (1 - phi*phi) * ((double(rand()) / RAND_MAX) - 0.5));
-}
-
-__device__ __host__ double q(double phi, double k) {
-	//return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi);
-	return (phi >= 1) ? 0 : (1 - phi) / (1 + k - (1 - k) * phi) + (1 + phi) * 0.2 / 2;
-	//return (phi >= 1) ? 0 : (1 - phi) / 2;
-	//return (phi >= 1) ? 0 : (1 - phi) / 2 + (1 + phi) * 0.2 / 2;
 }

@@ -47,7 +47,7 @@ public:
 
 	void MeshRefinement();
 	void find_matrixs(double lambda, double epsilon,unsigned tloop, double dt);
-	void cu_find_matrixs(double lambda, double epsilon,unsigned tloop, double dt);
+	void cu_find_matrixs(float lambda, float epsilon,unsigned tloop, float dt);
 	void time_discretization(double lambda, double epsilon,unsigned tloop, double dt);
 
 
