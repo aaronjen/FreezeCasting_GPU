@@ -11,11 +11,6 @@ all: $(COBJS)
 FEM.o: FEM.cu FEM.h
 	$(CXX) $(CXXFLAGS) FEM.cu -c
 
-ShapeFunctions.o: ShapeFunctions.cu ShapeFunctions.h
-	$(CXX) $(CXXFLAGS) ShapeFunctions.cu -c
-
-Quadtree.o: Quadtree.cu Quadtree.h
-	$(CXX) $(CXXFLAGS) Quadtree.cu -c
 
 run:
 	./main

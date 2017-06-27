@@ -51,7 +51,7 @@ int main() {
 
 		
 		// Mesh refinement
-		if ((tloop) % mesh_skip == 0){
+		if ((tloop) % mesh_skip == 0 && tloop == 0){
 			fem.MeshRefinement();
 		}
 
