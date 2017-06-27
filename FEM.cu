@@ -58,37 +58,36 @@ void FEM::MeshRefinement() {
 	//fout_time << NodeCoordinateList.size() << "\tNodes" << endl;
 	//fout_time << endl;
 
-	// cudaFree(aPHI);
-	// cudaFree(aU);
-	// cudaFree(aEFT);
-	// cudaFree(aNodeNum);
-	// cudaFree(elementType);
-	// cudaFree(aCoordX);
-	// cudaFree(aCoordY);
+	cudaFree(aPHI);
+	cudaFree(aU);
+	cudaFree(aEFT);
+	cudaFree(aNodeNum);
+	cudaFree(elementType);
+	cudaFree(aCoordX);
+	cudaFree(aCoordY);
 
-	// cudaMallocManaged(&aPHI, sizeof(double)*ncSize);
-	// cudaMallocManaged(&aU, sizeof(double)*ncSize);
-	// cudaMallocManaged(&aEFT, sizeof(int)*elemSize*8); //Element at max 8 nodes
-	// cudaMallocManaged(&aNodeNum, sizeof(int)*elemSize);
-	// cudaMallocManaged(&elementType, sizeof(char)*elemSize);
-	// cudaMallocManaged(&aCoordX, sizeof(double)*ncSize);
-	// cudaMallocManaged(&aCoordY, sizeof(double)*ncSize);
+	cudaMallocManaged(&aPHI, sizeof(double)*ncSize);
+	cudaMallocManaged(&aU, sizeof(double)*ncSize);
+	cudaMallocManaged(&aEFT, sizeof(int)*elemSize*8); //Element at max 8 nodes
+	cudaMallocManaged(&aNodeNum, sizeof(int)*elemSize);
+	cudaMallocManaged(&elementType, sizeof(char)*elemSize);
+	cudaMallocManaged(&aCoordX, sizeof(double)*ncSize);
+	cudaMallocManaged(&aCoordY, sizeof(double)*ncSize);
 
-	// // copy EFT to array
-	// for(int i = 0; i < elemSize; ++i){
-	// 	aNodeNum[i] = EFT[i].size();
-	// 	for(int j = 0; j < EFT[i].size(); ++j){
-	// 		aEFT[i*8+j] = EFT[i][j];
-	// 	}
+	// copy EFT to array
+	for(int i = 0; i < elemSize; ++i){
+		aNodeNum[i] = EFT[i].size();
+		for(int j = 0; j < EFT[i].size(); ++j){
+			aEFT[i*8+j] = EFT[i][j];
+		}
+		elementType[i] = (unsigned char)FinalElementList[i]->bitElementType.to_ulong();
+	}
 
-	// 	elementType[i] = (unsigned char)FinalElementList[i]->bitElementType.to_ulong();
-	// }
-
-	// //copy elementType to array
-	// for(int i = 0; i < ncSize; ++i){
-	// 	aCoordX[i] = NodeCoordinates[i].x;
-	// 	aCoordY[i] = NodeCoordinates[i].y;
-	// }
+	//copy elementType to array
+	for(int i = 0; i < ncSize; ++i){
+		aCoordX[i] = NodeCoordinates[i].x;
+		aCoordY[i] = NodeCoordinates[i].y;
+	}
 
 
 	// device pointer
@@ -455,6 +454,9 @@ void FEM::cu_find_matrixs(double lambda, double epsilon, unsigned tloop, double 
 
 	cudaMemcpy(aPHI, PHI.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(aU, U.data(), sizeof(double)*ncSize, cudaMemcpyHostToDevice);
+	cu_element<<<1024,1024>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY,
+                  aM11, aM21, aM22, aK11, aK21, aK22, aF1, ncSize, elemSize);
+	
 }
 
 
@@ -531,10 +533,8 @@ void FEM::time_discretization(
 	scheme_time += clock() - t; //<- scheme
 	
 	t = clock(); //-> matrix
-
-	// cu_find_matrixs(lambda, epsilon, tloop, dt);
-
-	find_matrixs(lambda, epsilon, tloop, dt);
+	cu_find_matrixs(lambda, epsilon, tloop, dt);
+	//find_matrixs(lambda, epsilon, tloop, dt);
 	SparseMatrix<double> mM11 = Map<MatrixXd>(aM11, ncSize, ncSize).sparseView();
 	SparseMatrix<double> mM21 = Map<MatrixXd>(aM21, ncSize, ncSize).sparseView();
 	SparseMatrix<double> mM22 = Map<MatrixXd>(aM22, ncSize, ncSize).sparseView();

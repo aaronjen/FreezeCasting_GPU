@@ -22,4 +22,10 @@ run:
 
 clean:
 	rm -rf *.o
+	rm -rf out*
+	rm -rf mesh* 
 	rm main
+
+cleandata:
+	rm -rf out*
+	rm -rf mesh* 
