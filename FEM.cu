@@ -294,25 +294,24 @@ __global__ void cu_element(
 	const float etas[4] = {-0.577350269189626, -0.577350269189626, 0.577350269189626, 0.577350269189626};
 
 	int m = 6;
-    float RealTime = Tau0 * tloop; // (s)
+	float RealTime = Tau0 * tloop; // (s)
+	int numNodePerElement = aNodeNum[e];
+	unsigned char bitElementType = elementType[e];
+	MatrixXf elementNodesCoord(numNodePerElement,2);
+	VectorXf phi(numNodePerElement);
+	VectorXf u(numNodePerElement);
 
-    int numNodePerElement = aNodeNum[e];
-    unsigned char bitElementType = elementType[e];
-    MatrixXf elementNodesCoord(numNodePerElement,2);
-    VectorXf phi(numNodePerElement);
-    VectorXf u(numNodePerElement);
+	for (unsigned i = 0; i < numNodePerElement; i++) {
+		int nodeSerial = aEFT[e*8 + i];
+		elementNodesCoord(i, 0) = aCoordX[nodeSerial];
+		elementNodesCoord(i, 1) = aCoordY[nodeSerial];
+		phi(i) = aPHI[nodeSerial];
+		u(i) = aU[nodeSerial];
+	}
 
-    for (unsigned i = 0; i < numNodePerElement; i++) {
-    	int nodeSerial = aEFT[e*8 + i];
-    	elementNodesCoord(i, 0) = aCoordX[nodeSerial];
-    	elementNodesCoord(i, 1) = aCoordY[nodeSerial];
-    	phi(i) = aPHI[nodeSerial];
-    	u(i) = aU[nodeSerial];
-    }
-
-    MatrixXf Ce = MatrixXf::Zero(numNodePerElement, numNodePerElement);
-    MatrixXf Ae = MatrixXf::Zero(numNodePerElement, numNodePerElement);
-    MatrixXf Ee = MatrixXf::Zero(numNodePerElement, numNodePerElement);
+	MatrixXf Ce = MatrixXf::Zero(numNodePerElement, numNodePerElement);
+	MatrixXf Ae = MatrixXf::Zero(numNodePerElement, numNodePerElement);
+	MatrixXf Ee = MatrixXf::Zero(numNodePerElement, numNodePerElement);
 	VectorXf Fe = VectorXf::Zero(numNodePerElement); // n x 1
 
 	RowVectorXf N0 = cuShapeFunction(0, 0, bitElementType);
@@ -340,7 +339,6 @@ __global__ void cu_element(
 		MatrixXf dN = cuNaturalDerivatives(xi, eta, bitElementType); // 2 x n
 		MatrixXf B = cuXYDerivatives(elementNodesCoord, dN); // 2 x n
 		float J = cudetJacobian(elementNodesCoord, dN); // 1 x 1
-
 
                 // matrixs of a element
 		Ce += N.transpose() * N * W * J; // n x n
@@ -376,8 +374,6 @@ __global__ void cu_element(
 			}
 			if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
 				atomicAdd(&aK11[idx], -as * asp * Ee(i, j));
-
-			
 
 		}
 		if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
