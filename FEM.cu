@@ -243,75 +243,75 @@ __device__ __host__ MatrixXf cuNaturalDerivatives(float xi, float eta, unsigned 
 		case(253): //11111101
 			Ni_xi[6] = 0;
 			Ni_eta[6] = 0;
-			naturalDerivatives.resize(7);
+			naturalDerivatives.resize(2,7);
 			break;
 		case(251): //11111011
 			Ni_xi[5] = 0;
 			Ni_eta[5] = 0;
-			naturalDerivatives.resize(7);
+			naturalDerivatives.resize(2,7);
 			break;
 		case(247): //11110111
 			Ni_xi[4] = 0;
 			Ni_eta[4] = 0;
-			naturalDerivatives.resize(7);
+			naturalDerivatives.resize(2,7);
 			break;
 		//Q6
 		case(252): //11111100
 			Ni_xi[7] = Ni_xi[6] = 0;
 			Ni_eta[7] = Ni_eta[6] = 0;
-			shape.resize(6);
+			naturalDerivatives.resize(2,6);
 			break;
 		case(249): //11111001
 			Ni_xi[6] = Ni_xi[5] = 0;
 			Ni_eta[6] = Ni_eta[5] = 0;
-			shape.resize(6);
+			naturalDerivatives.resize(2,6);
 			break;
 		case(243): //11110011           
 			Ni_xi[5] = Ni_xi[4] = 0;
 			Ni_eta[5] = Ni_eta[4] = 0;
-			shape.resize(6);
+			naturalDerivatives.resize(2,6);
 			break;
 		case(246): //11110110
 			Ni_xi[4] = Ni_xi[7] = 0;
 			Ni_eta[4] = Ni_eta[7] = 0;
-			shape.resize(6);
+			naturalDerivatives.resize(2,6);
 			break;
 		case(245): //11110101
 			Ni_xi[6] = Ni_xi[4] = 0;
 			Ni_eta[6] = Ni_eta[4] = 0;
-			shape.resize(6);
+			naturalDerivatives.resize(2,6);
 			break;
 		case(250): //11111010
 			Ni_xi[7] = Ni_xi[5] = 0;
 			Ni_eta[7] = Ni_eta[5] = 0;
-			shape.resize(6);
+			naturalDerivatives.resize(2,6);
 			break;
 		//Q5
 		case(248): //11111000
 			Ni_xi[7] = Ni_xi[6] = Ni_xi[5] = 0;
 			Ni_eta[7] = Ni_eta[6] = Ni_eta[5] = 0;
-			shape.resize(5);
+			naturalDerivatives.resize(2,5);
 			break;
 		case(241): //11110001
 			Ni_xi[6] = Ni_xi[5] = Ni_xi[4] = 0;
 			Ni_eta[6] = Ni_eta[5] = Ni_eta[4] = 0;
-			shape.resize(5);
+			naturalDerivatives.resize(2,5);
 			break;
 		case(242): //11110010
 			Ni_xi[7] = Ni_xi[5] = Ni_xi[4] = 0;
 			Ni_eta[7] = Ni_eta[5] = Ni_eta[4] = 0;
-			shape.resize(5);
+			naturalDerivatives.resize(2,5);
 			break;
 		case(244): //11110100
 			Ni_xi[7] = Ni_xi[6] = Ni_xi[4] = 0;
 			Ni_eta[7] = Ni_eta[6] = Ni_eta[4] = 0;
-			shape.resize(5);
+			naturalDerivatives.resize(2,5);
 			break;
 		//Q4
 		case(240): //11110000
 			Ni_xi[7] = Ni_xi[6] = Ni_xi[5] = Ni_xi[4] = 0;
 			Ni_eta[7] = Ni_eta[6] = Ni_eta[5] = Ni_eta[4] = 0;
-			shape.resize(4);
+			naturalDerivatives.resize(2,4);
 			break;
 	}
 	for (int i=4; i<8; ++i) {
