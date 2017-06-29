@@ -79,34 +79,22 @@ void FEM::MeshRefinement() {
 	// copy EFT to array
 	for(int i = 0; i < elemSize; ++i){
 		aNodeNum[i] = EFT[i].size();
-		// cudaMemset(aNodeNum+i, EFT[i].size(), sizeof(int));
 
 		for(int j = 0; j < EFT[i].size(); ++j){
 			aEFT[i * 8+j] = EFT[i][j];
-			// cudaMemset(aEFT+i*8, EFT[i][j], sizeof(int));
 		}
 		elementType[i] = (unsigned char)FinalElementList[i]->bitElementType.to_ulong();
-		// unsigned char c = (unsigned char)FinalElementList[i]->bitElementType.to_ulong();
-		// cudaMemset(elementType+i, c,  sizeof(unsigned char));
 	}
 
 	//copy elementType to array
 	for(int i = 0; i < ncSize; ++i){
 		aCoordX[i] = NodeCoordinates[i].x;
-		// cudaMemset(aCoordX+i, NodeCoordinates[i].x, sizeof(int));
 		aCoordY[i] = NodeCoordinates[i].y;
-		// cudaMemset(aCoordY+i, NodeCoordinates[i].y, sizeof(int));
 	}
 
 
 	// device pointer
 	cudaFree(adM11);
-	cudaFree(adM21);
-	cudaFree(adM22);
-	cudaFree(adK11);
-	cudaFree(adK21);
-	cudaFree(adK22);
-	cudaFree(adF1);
 
 	cudaMallocManaged((void **)&adM11, sizeof(float)*ncSize*ncSize);
 	cudaMallocManaged((void **)&adM21, sizeof(float)*ncSize*ncSize);
@@ -115,6 +103,12 @@ void FEM::MeshRefinement() {
 	cudaMallocManaged((void **)&adK21, sizeof(float)*ncSize*ncSize);
 	cudaMallocManaged((void **)&adK22, sizeof(float)*ncSize*ncSize);
 	cudaMallocManaged((void **)&adF1,  sizeof(float)*ncSize);
+
+	// adM21 = adM11 + 1*ncSize*ncSize;
+	// adM22 = adM11 + 2*ncSize*ncSize;
+	// adK11 = adM11 + 3*ncSize*ncSize;
+	// adK21 = adM11 + 4*ncSize*ncSize;
+	// adK22 = adM11 + 5*ncSize*ncSize;
 
 	// host pointer
 	// free(aM11);
