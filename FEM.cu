@@ -129,208 +129,208 @@ void FEM::MeshRefinement() {
 }
 
 __device__ __host__ RowVectorXf cuShapeFunction(float xi, float eta, unsigned char bitElementType) {
-	//RowVectorXf shape(numberOfNodes);
-	float Ni [8] = {(1 - xi) * (1 - eta) / 4,
-		(1 + xi) * (1 - eta) / 4,
-		(1 + xi) * (1 + eta) / 4,
-		(1 - xi) * (1 + eta) / 4,
-		(1 - xi*xi) * (1 - eta) / 2,
-		(1 - eta*eta) * (1 + xi) / 2,
-		(1 - xi*xi) * (1 + eta) / 2,
-		(1 - eta*eta) * (1 - xi) / 2};
-	RowVectorXf shape(8);
-	switch((int)bitElementType){
-		//Q8
-		case(255): //11111111
-			break;
-		//Q7
-		case(254): //11111110
-			Ni[7] = 0;
-			shape.resize(7);
-			break;
-		case(253): //11111101
-			Ni[6] = 0;
-			shape.resize(7);
-			break;
-		case(251): //11111011
-			Ni[5] = 0;
-			shape.resize(7);
-			break;
-		case(247): //11110111
-			Ni[4] = 0;		
-			shape.resize(7);
-			break;
-		//Q6
-		case(252): //11111100
-			Ni[7] = Ni[6] = 0;
-			shape.resize(6);
-			break;
-		case(249): //11111001
-			Ni[6] = Ni[5] = 0;
-			shape.resize(6);
-			break;
-		case(243): //11110011		
-			Ni[5] = Ni[4] = 0;
-			shape.resize(6);
-			break;
-		case(246): //11110110
-			Ni[4] = Ni[7] = 0;
-			shape.resize(6);
-			break;
-		case(245): //11110101
-			Ni[6] = Ni[4] = 0;
-			shape.resize(6);
-			break;
-		case(250): //11111010
-			Ni[7] = Ni[5] = 0;
-			shape.resize(6);
-			break;
-		//Q5
-		case(248): //11111000
-			Ni[7] = Ni[6] = Ni[5] = 0;
-			shape.resize(5);
-			break;
-		case(241): //11110001
-			Ni[6] = Ni[5] = Ni[4] = 0;
-			shape.resize(5);
-			break;
-		case(242): //11110010
-			Ni[7] = Ni[5] = Ni[4] = 0;
-			shape.resize(5);
-			break;
-		case(244): //11110100
-			Ni[7] = Ni[6] = Ni[4] = 0;
-			shape.resize(5);
-			break;
-		//Q4
-		case(240): //11110000
-			Ni[7] = Ni[6] = Ni[5] = Ni[4] = 0;
-			shape.resize(4);
-			break;
-	}
-	int cnt=4;
+    //RowVectorXf shape(numberOfNodes);
+    float Ni [8] = {(1 - xi) * (1 - eta) / 4,
+        (1 + xi) * (1 - eta) / 4,
+        (1 + xi) * (1 + eta) / 4,
+        (1 - xi) * (1 + eta) / 4,
+        (1 - xi*xi) * (1 - eta) / 2,
+        (1 - eta*eta) * (1 + xi) / 2,
+        (1 - xi*xi) * (1 + eta) / 2,
+        (1 - eta*eta) * (1 - xi) / 2};
+    RowVectorXf shape(8);
+    switch((int)bitElementType){
+        //Q8
+        case(255): //11111111
+            break;
+        //Q7
+        case(127): //01111111
+            Ni[7] = 0;
+            shape.resize(7);
+            break;
+        case(191): //10111111
+            Ni[6] = 0;
+            shape.resize(7);
+            break;
+        case(223): //11011111
+            Ni[5] = 0;
+            shape.resize(7);
+            break;
+        case(239): //11101111
+            Ni[4] = 0;      
+            shape.resize(7);
+            break;
+        //Q6
+        case(63):  //00111111
+            Ni[7] = Ni[6] = 0;
+            shape.resize(6);
+            break;
+        case(159): //10011111
+            Ni[6] = Ni[5] = 0;
+            shape.resize(6);
+            break;
+        case(207): //11001111       
+            Ni[5] = Ni[4] = 0;
+            shape.resize(6);
+            break;
+        case(111): //01101111
+            Ni[4] = Ni[7] = 0;
+            shape.resize(6);
+            break;
+        case(175): //10101111
+            Ni[6] = Ni[4] = 0;
+            shape.resize(6);
+            break;
+        case(95): //01011111
+            Ni[7] = Ni[5] = 0;
+            shape.resize(6);
+            break;
+        //Q5
+        case(31): //00011111
+            Ni[7] = Ni[6] = Ni[5] = 0;
+            shape.resize(5);
+            break;
+        case(143): //10001111
+            Ni[6] = Ni[5] = Ni[4] = 0;
+            shape.resize(5);
+            break;
+        case(79): //01001111
+            Ni[7] = Ni[5] = Ni[4] = 0;
+            shape.resize(5);
+            break;
+        case(47): //00101111
+            Ni[7] = Ni[6] = Ni[4] = 0;
+            shape.resize(5);
+            break;
+        //Q4
+        case(15): //00001111
+            Ni[7] = Ni[6] = Ni[5] = Ni[4] = 0;
+            shape.resize(4);
+            break;
+    }
+    int cnt=4;
         for (int i = 4;i<8;++i)
-        	if (Ni[i]!=0) shape(cnt++)=Ni[i];
-	shape(3) = Ni[3] - (Ni[6] + Ni[7]) / 2;
-	shape(2) = Ni[2] - (Ni[5] + Ni[6]) / 2;
-	shape(1) = Ni[1] - (Ni[4] + Ni[5]) / 2;
-	shape(0) = Ni[0] - (Ni[7] + Ni[4]) / 2;
-	return shape;
+            if (bitElementType&(1<<i)) shape(cnt++)=Ni[i];
+    shape(3) = Ni[3] - (Ni[6] + Ni[7]) / 2;
+    shape(2) = Ni[2] - (Ni[5] + Ni[6]) / 2;
+    shape(1) = Ni[1] - (Ni[4] + Ni[5]) / 2;
+    shape(0) = Ni[0] - (Ni[7] + Ni[4]) / 2;
+    return shape;
 }
 
 __device__ __host__ MatrixXf cuNaturalDerivatives(float xi, float eta, unsigned char bitElementType) {
-	MatrixXf naturalDerivatives(2,8);
-	float Ni_xi[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	float Ni_eta[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	Ni_xi[4]  = - xi * (1 - eta);
-	Ni_eta[4] = -(1 - xi*xi) / 2;
-	Ni_xi[5]  =  (1 - eta*eta) / 2;
-	Ni_eta[5] = - eta * (1 + xi);
-	Ni_xi[6]  = - xi * (1 + eta);
-	Ni_eta[6] =  (1 - xi*xi) / 2;
-	Ni_xi[7]  = -(1 - eta*eta) / 2;
-	Ni_eta[7] = - eta * (1 - xi);
-	switch((int)bitElementType){
-		//Q8
-		case(255): //11111111
-			break;
-		//Q7
-		case(254): //11111110
-			Ni_xi[7] = 0;
-			Ni_eta[7] = 0;
-			naturalDerivatives.resize(2,7);
-			break;
-		case(253): //11111101
-			Ni_xi[6] = 0;
-			Ni_eta[6] = 0;
-			naturalDerivatives.resize(2,7);
-			break;
-		case(251): //11111011
-			Ni_xi[5] = 0;
-			Ni_eta[5] = 0;
-			naturalDerivatives.resize(2,7);
-			break;
-		case(247): //11110111
-			Ni_xi[4] = 0;
-			Ni_eta[4] = 0;
-			naturalDerivatives.resize(2,7);
-			break;
-		//Q6
-		case(252): //11111100
-			Ni_xi[7] = Ni_xi[6] = 0;
-			Ni_eta[7] = Ni_eta[6] = 0;
-			naturalDerivatives.resize(2,6);
-			break;
-		case(249): //11111001
-			Ni_xi[6] = Ni_xi[5] = 0;
-			Ni_eta[6] = Ni_eta[5] = 0;
-			naturalDerivatives.resize(2,6);
-			break;
-		case(243): //11110011           
-			Ni_xi[5] = Ni_xi[4] = 0;
-			Ni_eta[5] = Ni_eta[4] = 0;
-			naturalDerivatives.resize(2,6);
-			break;
-		case(246): //11110110
-			Ni_xi[4] = Ni_xi[7] = 0;
-			Ni_eta[4] = Ni_eta[7] = 0;
-			naturalDerivatives.resize(2,6);
-			break;
-		case(245): //11110101
-			Ni_xi[6] = Ni_xi[4] = 0;
-			Ni_eta[6] = Ni_eta[4] = 0;
-			naturalDerivatives.resize(2,6);
-			break;
-		case(250): //11111010
-			Ni_xi[7] = Ni_xi[5] = 0;
-			Ni_eta[7] = Ni_eta[5] = 0;
-			naturalDerivatives.resize(2,6);
-			break;
-		//Q5
-		case(248): //11111000
-			Ni_xi[7] = Ni_xi[6] = Ni_xi[5] = 0;
-			Ni_eta[7] = Ni_eta[6] = Ni_eta[5] = 0;
-			naturalDerivatives.resize(2,5);
-			break;
-		case(241): //11110001
-			Ni_xi[6] = Ni_xi[5] = Ni_xi[4] = 0;
-			Ni_eta[6] = Ni_eta[5] = Ni_eta[4] = 0;
-			naturalDerivatives.resize(2,5);
-			break;
-		case(242): //11110010
-			Ni_xi[7] = Ni_xi[5] = Ni_xi[4] = 0;
-			Ni_eta[7] = Ni_eta[5] = Ni_eta[4] = 0;
-			naturalDerivatives.resize(2,5);
-			break;
-		case(244): //11110100
-			Ni_xi[7] = Ni_xi[6] = Ni_xi[4] = 0;
-			Ni_eta[7] = Ni_eta[6] = Ni_eta[4] = 0;
-			naturalDerivatives.resize(2,5);
-			break;
-		//Q4
-		case(240): //11110000
-			Ni_xi[7] = Ni_xi[6] = Ni_xi[5] = Ni_xi[4] = 0;
-			Ni_eta[7] = Ni_eta[6] = Ni_eta[5] = Ni_eta[4] = 0;
-			naturalDerivatives.resize(2,4);
-			break;
-	}
-	int cnt = 4;
-	for (int i=4; i<8; ++i) {
-		if(Ni_xi[i] == 0 && Ni_eta[i] == 0) {
-			naturalDerivatives(0,cnt) = Ni_xi[i];
-			naturalDerivatives(1,cnt) = Ni_eta[i];
-			++cnt;
-		}
-	}
-	naturalDerivatives(0,0)  = -(1 - eta) / 4 - (Ni_xi[7]  + Ni_xi[4])  / 2;
-	naturalDerivatives(1,0) = -(1 - xi)  / 4 - (Ni_eta[7] + Ni_eta[4]) / 2;
-	naturalDerivatives(0,1)  =  (1 - eta) / 4 - (Ni_xi[4]  + Ni_xi[5])  / 2;
-	naturalDerivatives(1,1) = -(1 + xi)  / 4 - (Ni_eta[4] + Ni_eta[5]) / 2;
-	naturalDerivatives(0,2)  =  (1 + eta) / 4 - (Ni_xi[5]  + Ni_xi[6])  / 2;
-	naturalDerivatives(1,2) =  (1 + xi)  / 4 - (Ni_eta[5] + Ni_eta[6]) / 2;
-	naturalDerivatives(0,3)  = -(1 + eta) / 4 - (Ni_xi[6]  + Ni_xi[7])  / 2;
-	naturalDerivatives(1,3) =  (1 - xi)  / 4 - (Ni_eta[6] + Ni_eta[7]) / 2;
-	return naturalDerivatives;
+    MatrixXf naturalDerivatives(2,8);
+    float Ni_xi[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    float Ni_eta[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    Ni_xi[4]  = - xi * (1 - eta);
+    Ni_eta[4] = -(1 - xi*xi) / 2;
+    Ni_xi[5]  =  (1 - eta*eta) / 2;
+    Ni_eta[5] = - eta * (1 + xi);
+    Ni_xi[6]  = - xi * (1 + eta);
+    Ni_eta[6] =  (1 - xi*xi) / 2;
+    Ni_xi[7]  = -(1 - eta*eta) / 2;
+    Ni_eta[7] = - eta * (1 - xi);
+    switch((int)bitElementType){
+        //Q8
+        case(255): //11111111
+            break;
+        //Q7
+        case(127): //01111111
+            Ni_xi[7] = 0;
+            Ni_eta[7] = 0;
+            naturalDerivatives.resize(2,7);
+            break;
+        case(191): //10111111
+            Ni_xi[6] = 0;
+            Ni_eta[6] = 0;
+            naturalDerivatives.resize(2,7);
+            break;
+        case(223): //11011111
+            Ni_xi[5] = 0;
+            Ni_eta[5] = 0;
+            naturalDerivatives.resize(2,7);
+            break;
+        case(239): //11101111
+            Ni_xi[4] = 0;
+            Ni_eta[4] = 0;
+            naturalDerivatives.resize(2,7);
+            break;
+        //Q6
+        case(63):  //00111111
+            Ni_xi[7] = Ni_xi[6] = 0;
+            Ni_eta[7] = Ni_eta[6] = 0;
+            naturalDerivatives.resize(2,6);
+            break;
+        case(159): //10011111
+            Ni_xi[6] = Ni_xi[5] = 0;
+            Ni_eta[6] = Ni_eta[5] = 0;
+            naturalDerivatives.resize(2,6);
+            break;
+        case(207): //11001111          
+            Ni_xi[5] = Ni_xi[4] = 0;
+            Ni_eta[5] = Ni_eta[4] = 0;
+            naturalDerivatives.resize(2,6);
+            break;
+        case(111): //01101111
+            Ni_xi[4] = Ni_xi[7] = 0;
+            Ni_eta[4] = Ni_eta[7] = 0;
+            naturalDerivatives.resize(2,6);
+            break;
+        case(175): //10101111
+            Ni_xi[6] = Ni_xi[4] = 0;
+            Ni_eta[6] = Ni_eta[4] = 0;
+            naturalDerivatives.resize(2,6);
+            break;
+        case(95): //01011111
+            Ni_xi[7] = Ni_xi[5] = 0;
+            Ni_eta[7] = Ni_eta[5] = 0;
+            naturalDerivatives.resize(2,6);
+            break;
+        //Q5
+        case(31): //00011111
+            Ni_xi[7] = Ni_xi[6] = Ni_xi[5] = 0;
+            Ni_eta[7] = Ni_eta[6] = Ni_eta[5] = 0;
+            naturalDerivatives.resize(2,5);
+            break;
+        case(143): //10001111
+            Ni_xi[6] = Ni_xi[5] = Ni_xi[4] = 0;
+            Ni_eta[6] = Ni_eta[5] = Ni_eta[4] = 0;
+            naturalDerivatives.resize(2,5);
+            break;
+        case(79): //01001111
+            Ni_xi[7] = Ni_xi[5] = Ni_xi[4] = 0;
+            Ni_eta[7] = Ni_eta[5] = Ni_eta[4] = 0;
+            naturalDerivatives.resize(2,5);
+            break;
+        case(47): //00101111
+            Ni_xi[7] = Ni_xi[6] = Ni_xi[4] = 0;
+            Ni_eta[7] = Ni_eta[6] = Ni_eta[4] = 0;
+            naturalDerivatives.resize(2,5);
+            break;
+        //Q4
+        case(15): //00001111
+            Ni_xi[7] = Ni_xi[6] = Ni_xi[5] = Ni_xi[4] = 0;
+            Ni_eta[7] = Ni_eta[6] = Ni_eta[5] = Ni_eta[4] = 0;
+            naturalDerivatives.resize(2,4);
+            break;
+    }
+    int cnt = 4;
+    for (int i=4; i<8; ++i) {
+        if (bitElementType & ( 1 << i ) ) {
+            naturalDerivatives(0,cnt) = Ni_xi[i];
+            naturalDerivatives(1,cnt) = Ni_eta[i];
+            ++cnt;
+        }
+    }
+    naturalDerivatives(0,0)  = -(1 - eta) / 4 - (Ni_xi[7]  + Ni_xi[4])  / 2;
+    naturalDerivatives(1,0) = -(1 - xi)  / 4 - (Ni_eta[7] + Ni_eta[4]) / 2;
+    naturalDerivatives(0,1)  =  (1 - eta) / 4 - (Ni_xi[4]  + Ni_xi[5])  / 2;
+    naturalDerivatives(1,1) = -(1 + xi)  / 4 - (Ni_eta[4] + Ni_eta[5]) / 2;
+    naturalDerivatives(0,2)  =  (1 + eta) / 4 - (Ni_xi[5]  + Ni_xi[6])  / 2;
+    naturalDerivatives(1,2) =  (1 + xi)  / 4 - (Ni_eta[5] + Ni_eta[6]) / 2;
+    naturalDerivatives(0,3)  = -(1 + eta) / 4 - (Ni_xi[6]  + Ni_xi[7])  / 2;
+    naturalDerivatives(1,3) =  (1 - xi)  / 4 - (Ni_eta[6] + Ni_eta[7]) / 2;
+    return naturalDerivatives;
 }
 
 __device__ float determinant(const Matrix2f& target){
