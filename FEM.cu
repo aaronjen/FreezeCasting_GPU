@@ -130,16 +130,16 @@ void FEM::MeshRefinement() {
 
 __device__ __host__ RowVectorXf cuShapeFunction(float xi, float eta, unsigned char bitElementType) {
 	//RowVectorXf shape(numberOfNodes);
-	RowVectorXf shape(8);
-	switch((int)bitElementType){
-		float[8] Ni = {(1 - xi) * (1 - eta) / 4,
+	float Ni [8] = {(1 - xi) * (1 - eta) / 4,
 		(1 + xi) * (1 - eta) / 4,
 		(1 + xi) * (1 + eta) / 4,
 		(1 - xi) * (1 + eta) / 4,
 		(1 - xi*xi) * (1 - eta) / 2,
 		(1 - eta*eta) * (1 + xi) / 2,
 		(1 - xi*xi) * (1 + eta) / 2,
-		(1 - eta*eta) * (1 - xi) / 2};	
+		(1 - eta*eta) * (1 - xi) / 2};
+	RowVectorXf shape(8);
+	switch((int)bitElementType){
 		//Q8
 		case(255): //11111111
 			break;
@@ -314,6 +314,7 @@ __device__ __host__ MatrixXf cuNaturalDerivatives(float xi, float eta, unsigned 
 			naturalDerivatives.resize(2,4);
 			break;
 	}
+	int cnt = 4;
 	for (int i=4; i<8; ++i) {
 		if(Ni_xi[i] == 0 && Ni_eta[i] == 0) {
 			naturalDerivatives(0,cnt) = Ni_xi[i];
