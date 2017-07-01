@@ -493,16 +493,11 @@ __global__ void cu_element(
 		int x = aEFT[e * 8 + i];
 		for (unsigned j=0; j<numNodePerElement; j++) {
 			int y = aEFT[e * 8 + j];
-            int idx = y * ncSize + x;
 			int idx = y * ncSize + x + ncSize*ncSize*site[i];
 			if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
-				atomicAdd(&aM22[idx], Ce(i, j));
-				atomicAdd(&aM21[idx], -0.5*Ce(i, j));
-				atomicAdd(&aM11[idx], as * as * Ce(i, j));
-
-				// aM22[idx] = Ce(i, j);
-				// aM21[idx] = -0.5*Ce(i, j);
-				// aM11[idx] = as * as * Ce(i, j);
+				aM22[idx] = Ce(i, j);
+				aM21[idx] = -0.5*Ce(i, j);
+				aM11[idx] = as * as * Ce(i, j);
 
 			}
 			if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
@@ -510,20 +505,15 @@ __global__ void cu_element(
 				for(int i = 0; i < N0.size(); ++i){
 					N0phi += N0(i) * phi(i);
 				}
-				atomicAdd(&aK22[idx], -D * cuQ(N0phi, 0.7) * Ae(i, j));
-				atomicAdd(&aK11[idx], -as * as * Ae(i, j));
-
-				// aK22[idx] = -D * cuQ(N0phi, 0.7) * Ae(i, j);
-				// aK11[idx] = -as * as * Ae(i, j);
+				aK22[idx] = -D * cuQ(N0phi, 0.7) * Ae(i, j);
+				aK11[idx] = -as * as * Ae(i, j);
 			}
 			if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
-				atomicAdd(&aK11[idx], -as * asp * Ee(i, j));
-				// aK11[idx] = -as * asp * Ee(i, j);
+				aK11[idx] = -as * asp * Ee(i, j);
 
 		}
 		if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
-			atomicAdd(&aF1[x], Fe(i));
-			// aF1[x+ncSize*site[i]] = Fe(i);
+			aF1[x+ncSize*site[i]] = Fe(i);
 	}
 }
 
@@ -573,9 +563,9 @@ void FEM::cu_find_matrixs(float lambda, float epsilon, unsigned tloop, float dt)
 	cudaDeviceSynchronize();
 
 
-	// cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize);
+	cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize);
 
-	// cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
 }
 
 void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt) {
