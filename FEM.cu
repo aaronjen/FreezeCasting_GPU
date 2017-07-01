@@ -95,6 +95,13 @@ void FEM::MeshRefinement() {
 
 	// device pointer
 	cudaFree(adM11);
+	cudaFree(adM21);
+	cudaFree(adM22);
+	cudaFree(adK11);
+	cudaFree(adK21);
+	cudaFree(adK22);
+    cudaFree(adF1);
+
 
 	cudaMallocManaged((void **)&adM11, sizeof(float)*ncSize*ncSize*4);
 	cudaMallocManaged((void **)&adM21, sizeof(float)*ncSize*ncSize*4);
@@ -472,7 +479,8 @@ __global__ void cu_element(
 		Fe += N.transpose() * cuF(Nphi, Nu, theta, lambda) * W * J; // n x 1
 	}
 	int site[8] = {0};
-	int ElementTypeToSite[8] = {2, 3, 0, 1, 2, 3, 0, 1};
+	// int ElementTypeToSite[8] = {2, 3, 0, 1, 2, 3, 0, 1};
+    int ElementTypeToSite[8] = {0, 1, 2, 3, 0, 1, 2, 3};
 	int cnt = 0;
 	for(int i = 0; i < 8; ++i){
 		if(bitElementType & (1 << i)){
@@ -485,15 +493,16 @@ __global__ void cu_element(
 		int x = aEFT[e * 8 + i];
 		for (unsigned j=0; j<numNodePerElement; j++) {
 			int y = aEFT[e * 8 + j];
+            int idx = y * ncSize + x;
 			int idx = y * ncSize + x + ncSize*ncSize*site[i];
 			if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
-				// atomicAdd(&aM22[idx], Ce(i, j));
-				// atomicAdd(&aM21[idx], -0.5*Ce(i, j));
-				// atomicAdd(&aM11[idx], as * as * Ce(i, j));
+				atomicAdd(&aM22[idx], Ce(i, j));
+				atomicAdd(&aM21[idx], -0.5*Ce(i, j));
+				atomicAdd(&aM11[idx], as * as * Ce(i, j));
 
-				aM22[idx] = Ce(i, j);
-				aM21[idx] = -0.5*Ce(i, j);
-				aM11[idx] = as * as * Ce(i, j);
+				// aM22[idx] = Ce(i, j);
+				// aM21[idx] = -0.5*Ce(i, j);
+				// aM11[idx] = as * as * Ce(i, j);
 
 			}
 			if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
@@ -501,20 +510,20 @@ __global__ void cu_element(
 				for(int i = 0; i < N0.size(); ++i){
 					N0phi += N0(i) * phi(i);
 				}
-				// atomicAdd(&aK22[idx], -D * cuQ(N0phi, 0.7) * Ae(i, j));
-				// atomicAdd(&aK11[idx], -as * as * Ae(i, j));
+				atomicAdd(&aK22[idx], -D * cuQ(N0phi, 0.7) * Ae(i, j));
+				atomicAdd(&aK11[idx], -as * as * Ae(i, j));
 
-				aK22[idx] = -D * cuQ(N0phi, 0.7) * Ae(i, j);
-				aK11[idx] = -as * as * Ae(i, j);
+				// aK22[idx] = -D * cuQ(N0phi, 0.7) * Ae(i, j);
+				// aK11[idx] = -as * as * Ae(i, j);
 			}
 			if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
-				// atomicAdd(&aK11[idx], -as * asp * Ee(i, j));
-				aK11[idx] = -as * asp * Ee(i, j);
+				atomicAdd(&aK11[idx], -as * asp * Ee(i, j));
+				// aK11[idx] = -as * asp * Ee(i, j);
 
 		}
 		if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
-			// atomicAdd(&aF1[x], Fe(i));
-			aF1[x+ncSize*site[i]] = Fe(i);
+			atomicAdd(&aF1[x], Fe(i));
+			// aF1[x+ncSize*site[i]] = Fe(i);
 	}
 }
 
@@ -563,36 +572,10 @@ void FEM::cu_find_matrixs(float lambda, float epsilon, unsigned tloop, float dt)
 	cu_element<<<CeilDiv(elemSize, 256), 256>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY, adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize, elemSize);
 	cudaDeviceSynchronize();
 
-	// cout << adM11[0] << endl;
-	// cout << adM11[1] << endl;
-	// cout << adM11[2] << endl;
-	// cout << adM11[3] << endl;
 
-	// exit(1);
+	// cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize);
 
-	cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize);
-	// cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adM21, ncSize*ncSize);
-	// cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adM22, ncSize*ncSize);
-	// cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adK11, ncSize*ncSize);
-	// cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adK21, ncSize*ncSize);
-	// cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adK22, ncSize*ncSize);
-	// cu_sum<<<CeilDiv(ncSize, 256), 256>>>(adF1, ncSize);
-
-	cudaDeviceSynchronize();
-
-
-	// cpu_sum(adM11, ncSize*ncSize);
-	// cpu_sum(adM21, ncSize*ncSize);
-	// cpu_sum(adM22, ncSize*ncSize);
-	// cpu_sum(adK11, ncSize*ncSize);
-	// cpu_sum(adK21, ncSize*ncSize);
-	// cpu_sum(adK22, ncSize*ncSize);
-	// cpu_sum(adF1, ncSize);
-
-
-
-	
-
+	// cudaDeviceSynchronize();
 }
 
 void FEM::find_matrixs(double lambda, double epsilon, unsigned tloop, double dt) {
@@ -770,9 +753,6 @@ void FEM::time_discretization(
 		SparseMatrix<double> mK22 = Map<MatrixXf>(adK22, ncSize, ncSize).cast<double>().sparseView();
 		VectorXd vF1 = Map<VectorXf>(adF1, ncSize).cast<double>();
 
-		cout << mM11 << endl;
-		exit(1);
-
 		SparseMatrix<double> M = Up*(mM11)*Left + Down*(mM21)*Left + Down*(mM22)*Right;
 		SparseMatrix<double> K = Up*(mK11)*Left + Down*(mK21)*Left + Down*(mK22)*Right;
 		VectorXd F = Up * vF1;
@@ -802,6 +782,9 @@ void FEM::time_discretization(
 	SparseMatrix<double> mK21 = Map<MatrixXf>(adK21, ncSize, ncSize).cast<double>().sparseView();
 	SparseMatrix<double> mK22 = Map<MatrixXf>(adK22, ncSize, ncSize).cast<double>().sparseView();
 	VectorXd vF1 = Map<VectorXf>(adF1, ncSize).cast<double>();
+
+    // cout << vF1 << endl;
+    // exit(1);
 
 	matrix_time += clock() - t;	 //<- matrix
 
