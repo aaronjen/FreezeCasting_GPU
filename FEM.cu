@@ -500,17 +500,26 @@ __global__ void cu_element(
 				aM11[idx] = as * as * Ce(i, j);
 
 			}
-			if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
-				float N0phi = 0;
-				for(int i = 0; i < N0.size(); ++i){
-					N0phi += N0(i) * phi(i);
-				}
-				aK22[idx] = -D * cuQ(N0phi, 0.7) * Ae(i, j);
-				aK11[idx] = -as * as * Ae(i, j);
-			}
-			if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
-				aK11[idx] = -as * asp * Ee(i, j);
-
+            if ((Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) && (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)){
+                float N0phi = 0;
+                for(int i = 0; i < N0.size(); ++i){
+                    N0phi += N0(i) * phi(i);
+                }
+                aK22[idx] = -D * cuQ(N0phi, 0.7) * Ae(i, j);
+                aK11[idx] = -as * as * Ae(i, j) -as * asp * Ee(i, j);
+            }
+			else{
+                if (Ae(i, j) > 1.0E-12 || Ae(i, j) < -1.0E-12) {
+                    float N0phi = 0;
+                    for(int i = 0; i < N0.size(); ++i){
+                        N0phi += N0(i) * phi(i);
+                    }
+                    aK22[idx] = -D * cuQ(N0phi, 0.7) * Ae(i, j);
+                    aK11[idx] = -as * as * Ae(i, j);
+                }
+                if (Ee(i, j) > 1.0E-12 || Ee(i, j) < -1.0E-12)
+                    aK11[idx] = -as * asp * Ee(i, j);    
+            }
 		}
 		if (Fe(i) > 1.0E-12 || Fe(i) < -1.0E-12)
 			aF1[x+ncSize*site[i]] = Fe(i);
@@ -559,12 +568,12 @@ void FEM::cu_find_matrixs(float lambda, float epsilon, unsigned tloop, float dt)
 	cudaMemset(adK22, 0, sizeof(float)*ncSize*ncSize*4);
 	cudaMemset(adF1,  0, sizeof(float)*ncSize*4);
 
-	cu_element<<<CeilDiv(elemSize, 256), 256>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY, adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize, elemSize);
+    int blockSize = 512;
+
+	cu_element<<<CeilDiv(elemSize, blockSize), blockSize>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY, adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize, elemSize);
 	cudaDeviceSynchronize();
 
-
-	cu_sum<<<CeilDiv(ncSize*ncSize, 256), 256>>>(adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize);
-
+	cu_sum<<<CeilDiv(ncSize*ncSize, blockSize), blockSize>>>(adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize);
 	cudaDeviceSynchronize();
 }
 
@@ -755,10 +764,7 @@ void FEM::time_discretization(
 	PHI = d_telda.topRows(nNode);
 	U = d_telda.bottomRows(nNode);
 	scheme_time += clock() - t; //<- scheme
-	
-	t = clock(); //-> matrix
 
-	
 	cu_find_matrixs(lambda, epsilon, tloop, dt);
 	
 	// find_matrixs(lambda, epsilon, tloop, dt);
