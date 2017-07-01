@@ -494,7 +494,7 @@ __global__ void cu_element(
 		for (unsigned j=0; j<numNodePerElement; j++) {
 			int y = aEFT[e * 8 + j];
             int idx = y * ncSize + x;
-			int idx = y * ncSize + x + ncSize*ncSize*site[i];
+			// int idx = y * ncSize + x + ncSize*ncSize*site[i];
 			if (Ce(i, j) > 1.0E-12 || Ce(i, j) < -1.0E-12) {
 				atomicAdd(&aM22[idx], Ce(i, j));
 				atomicAdd(&aM21[idx], -0.5*Ce(i, j));
