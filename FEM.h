@@ -91,15 +91,15 @@ private:
 	float* adK22 = 0;
 	float* adF1 = 0;
 
-	double* aM11 = 0;
-	double* aM21 = 0;
-	double* aM22 = 0;
-	double* aK11 = 0;
-	double* aK21 = 0;
-	double* aK22 = 0;
-	double* aF1 = 0;
+	int* matPosX = 0;
+	int* matPosY = 0;
 
-
+	Eigen::SparseMatrix<double> mM11;
+	Eigen::SparseMatrix<double> mM21;
+	Eigen::SparseMatrix<double> mM22;
+	Eigen::SparseMatrix<double> mK11;
+	Eigen::SparseMatrix<double> mK21;
+	Eigen::SparseMatrix<double> mK22;
 };
 
 
