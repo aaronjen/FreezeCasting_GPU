@@ -568,7 +568,7 @@ void FEM::cu_find_matrixs(float lambda, float epsilon, unsigned tloop, float dt)
 	cudaMemset(adK22, 0, sizeof(float)*ncSize*ncSize*4);
 	cudaMemset(adF1,  0, sizeof(float)*ncSize*4);
 
-    int blockSize = 512;
+    int blockSize = 256;
 
 	cu_element<<<CeilDiv(elemSize, blockSize), blockSize>>>(lambda, tloop, epsilon, aPHI, aU, aEFT, aNodeNum, elementType, aCoordX, aCoordY, adM11, adM21, adM22, adK11, adK21, adK22, adF1, ncSize, elemSize);
 	cudaDeviceSynchronize();
